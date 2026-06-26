@@ -435,13 +435,27 @@ export default function App() {
         }
         return n;
       });
-      // Log each imported user
-      var logEntries = newArr.map(function(u){
+      // Log each imported user — skip if nothing changed
+      var logEntries = [];
+      newArr.forEach(function(u){
         var id=u.id; var existing=users[id];
-        var logType = !existing ? "import_new" : existing.type!==u.type ? "import_role" : "import_update";
-        return{type:logType,user_id:id,user_name:u.name,actor_id:me.id,actor_name:me.name,actor_type:me.type};
+        var logType;
+        if (!existing) {
+          logType = "import_new";
+        } else if (existing.type !== u.type) {
+          logType = "import_role";
+        } else {
+          // Check if any detail actually changed
+          var changed = existing.name !== u.name ||
+            (existing.phone||"") !== (u.phone||"") ||
+            (existing.email||"") !== (u.email||"") ||
+            (existing.hr||"") !== (u.hr||"") ||
+            (existing.password||"") !== (u.password||"");
+          if (!changed) return; // nothing changed — skip log
+          logType = "import_update";
+        }
+        logEntries.push({type:logType,user_id:id,user_name:u.name,actor_id:me.id,actor_name:me.name,actor_type:me.type});
       });
-      // Insert log entries one by one
       logEntries.forEach(function(e){ supabase.from("activity_log").insert(e); });
       setLog(function(prev){
         var newEntries = logEntries.map(function(e){
@@ -663,7 +677,7 @@ function LoginScreen(props) {
         {step === "id" && (
           <div>
             <input value={idVal} onChange={function(e){setIdVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")next();}} placeholder="000000000" autoFocus
-              style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid " + (props.error?C.red:"#CBD5E0"),fontSize:22,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",direction:"ltr",fontFamily:"monospace",color:C.navy,fontWeight:700}} />
+              style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid " + (props.error?C.red:"#CBD5E0"),fontSize:22,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",direction:"ltr",fontFamily:"monospace",color:"#1A202C",background:"#fff",fontWeight:700}} />
             {props.error && <div style={{background:"#FEF2F2",border:"1px solid "+C.red,borderRadius:8,padding:"7px 12px",marginTop:8,color:C.red,fontSize:13,textAlign:"center"}}>{props.error}</div>}
             <button onClick={next} style={{width:"100%",marginTop:14,padding:"13px 0",background:"linear-gradient(135deg,#E67E22,#F39C12)",color:"#fff",border:"none",borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>המשך</button>
             <div style={{marginTop:20,background:"#F7FAFC",borderRadius:10,padding:12}}>
@@ -693,7 +707,7 @@ function LoginScreen(props) {
               <button onClick={function(){setStep("id");setPassVal("");setDetType(null);}} style={{marginRight:"auto",background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>חזור</button>
             </div>
             <input type="password" value={passVal} onChange={function(e){setPassVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")props.onLogin(idVal.trim(),passVal);}} placeholder="סיסמה" autoFocus
-              style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid "+(props.error?C.red:"#CBD5E0"),fontSize:18,textAlign:"center",outline:"none",boxSizing:"border-box",color:C.navy,fontWeight:700,letterSpacing:3}} />
+              style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid "+(props.error?C.red:"#CBD5E0"),fontSize:18,textAlign:"center",outline:"none",boxSizing:"border-box",color:"#1A202C",background:"#fff",fontWeight:700,letterSpacing:3}} />
             {props.error && <div style={{background:"#FEF2F2",border:"1px solid "+C.red,borderRadius:8,padding:"7px 12px",marginTop:8,color:C.red,fontSize:13,textAlign:"center"}}>{props.error}</div>}
             <button onClick={function(){props.onLogin(idVal.trim(),passVal);}} style={{width:"100%",marginTop:14,padding:"13px 0",background:"linear-gradient(135deg,#E67E22,#F39C12)",color:"#fff",border:"none",borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>כניסה</button>
           </div>
@@ -1246,7 +1260,7 @@ function AdminRegisterModal(props) {
         <div style={{padding:"12px 20px",borderBottom:"1px solid #EEF2F7"}}>
           <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש שם או ת.ז..."
             autoFocus
-            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:13,outline:"none",boxSizing:"border-box"}} />
+            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",boxSizing:"border-box"}} />
         </div>
 
         {/* Candidate list */}
@@ -1347,7 +1361,7 @@ function AdminDayMgrModal(props) {
 
         <div style={{padding:"12px 20px",borderBottom:"1px solid #EEF2F7"}}>
           <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש שם או ת.ז..." autoFocus
-            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:13,outline:"none",boxSizing:"border-box"}} />
+            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",boxSizing:"border-box"}} />
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"8px 12px"}}>
@@ -1546,7 +1560,7 @@ function RegTable(props) {
     <div>
       <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
         <input value={props.search} onChange={function(e){props.onSearch(e.target.value);}} placeholder="חפש שם, ת.ז., טלפון, HR..."
-          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,outline:"none",width:"100%",maxWidth:340,boxSizing:"border-box"}} />
+          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",width:"100%",maxWidth:340,boxSizing:"border-box"}} />
         <span style={{fontSize:12,color:C.muted}}>{props.regList.length} רשומות</span>
       </div>
       {!props.regList.length
@@ -1650,7 +1664,7 @@ function AllUsers(props) {
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש..."
-          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,outline:"none",width:"100%",maxWidth:260,boxSizing:"border-box"}} />
+          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",width:"100%",maxWidth:260,boxSizing:"border-box"}} />
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {pills.map(function(p) {
             return <button key={p[0]} onClick={function(){setFt(p[0]);}} style={{padding:"5px 12px",borderRadius:18,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:ft===p[0]?C.navy:"#fff",color:ft===p[0]?"#fff":C.navy,boxShadow:ft===p[0]?"0 2px 8px rgba(15,45,74,.3)":"0 1px 3px rgba(0,0,0,.1)"}}>{p[1]}</button>;
@@ -1808,7 +1822,7 @@ function Unreg(props) {
 
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש שם, ת.ז., טלפון, HR..."
-          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,outline:"none",width:"100%",maxWidth:300,boxSizing:"border-box"}} />
+          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",width:"100%",maxWidth:300,boxSizing:"border-box"}} />
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {[["all","הכל ("+(uv+um+ud)+")"],["volunteer","מתנדבים"],["manager","אחראי משמרת"],["day_manager","אחראי יום"]].map(function(p){
             return <button key={p[0]} onClick={function(){setFt(p[0]);}} style={{padding:"5px 13px",borderRadius:18,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:ft===p[0]?C.navy:"#fff",color:ft===p[0]?"#fff":C.navy,boxShadow:ft===p[0]?"0 2px 8px rgba(15,45,74,.3)":"0 1px 3px rgba(0,0,0,.1)"}}>{p[1]}</button>;
@@ -1870,7 +1884,7 @@ function LogView(props) {
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש..."
-          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,outline:"none",width:"100%",maxWidth:250,boxSizing:"border-box"}} />
+          style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",width:"100%",maxWidth:250,boxSizing:"border-box"}} />
         <div style={{display:"flex",gap:5}}>
           {[["all","הכל"],["register","רישומים"],["remove","הסרות"],["delete_user","מחיקות"],["import_new","ייבוא"],["import_update","עדכון פרטים"],["import_role","עדכון תפקיד"]].map(function(p){
             return <button key={p[0]} onClick={function(){setFt(p[0]);}} style={{padding:"5px 11px",borderRadius:18,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:ft===p[0]?C.navy:"#fff",color:ft===p[0]?"#fff":C.muted,boxShadow:ft===p[0]?"0 2px 8px rgba(15,45,74,.3)":"0 1px 3px rgba(0,0,0,.1)"}}>{p[1]}</button>;
@@ -1962,7 +1976,7 @@ function ConfigView(props) {
             <div style={{background:"#F8FAFC",borderBottom:"2px solid #EEF2F7",padding:"14px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               <input value={props.dayNames[day]||("יום "+day)}
                 onChange={function(e){var v=e.target.value; props.onUpdateDayName(day,v);}}
-                style={{padding:"7px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:15,fontWeight:800,color:C.navy,outline:"none",background:"#fff",width:240}} />
+                style={{padding:"7px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:15,fontWeight:800,color:"#1A202C",background:"#fff",outline:"none",width:240}} />
               <div style={{display:"flex",alignItems:"center",gap:7,background:"#F0FDF9",borderRadius:9,padding:"7px 13px",border:"1px solid #CCFBF1"}}>
                 <span style={{fontSize:12,color:C.teal,fontWeight:700}}>📋 אחראי יום:</span>
                 <button onClick={function(){if(maxDm>0)props.onUpdateDayConfig(day,maxDm-1);}} disabled={maxDm<=0}
@@ -2016,7 +2030,7 @@ function ConfigView(props) {
                           <div style={{flex:"1 1 130px"}}>
                             <label style={{fontSize:10,fontWeight:700,color:C.muted,display:"block",marginBottom:3}}>שעות / תיאור</label>
                             <input value={shift.hours} onChange={function(e){props.onUpdateShift(day,shift.id,"hours",e.target.value);}}
-                              style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"2px solid #CBD5E0",fontSize:12,color:C.navy,outline:"none",boxSizing:"border-box"}} />
+                              style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"2px solid #CBD5E0",fontSize:12,color:"#1A202C",background:"#fff",outline:"none",boxSizing:"border-box"}} />
                           </div>
                         </div>
 
