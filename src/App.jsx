@@ -392,7 +392,16 @@ export default function App() {
   }
 
   function handleImport(newArr){
-    supabase.from("users").upsert(newArr,{onConflict:"id"}).then(function(res){
+    // Only send columns that exist in the DB schema
+    var cleaned = newArr.map(function(u){
+      var obj = {id:u.id, type:u.type, name:u.name};
+      if(u.phone)    obj.phone    = u.phone;
+      if(u.email)    obj.email    = u.email;
+      if(u.password) obj.password = String(u.password);
+      if(u.hr)       obj.hr       = u.hr;
+      return obj;
+    });
+    supabase.from("users").upsert(cleaned,{onConflict:"id"}).then(function(res){
       if(res.error){alert("שגיאה בייבוא: "+res.error.message);return;}
       setUsers(function(prev){
         var n=Object.assign({},prev);
@@ -614,19 +623,6 @@ function LoginScreen(props) {
               style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid " + (props.error?C.red:"#CBD5E0"),fontSize:22,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",direction:"ltr",fontFamily:"monospace",color:C.navy,fontWeight:700}} />
             {props.error && <div style={{background:"#FEF2F2",border:"1px solid "+C.red,borderRadius:8,padding:"7px 12px",marginTop:8,color:C.red,fontSize:13,textAlign:"center"}}>{props.error}</div>}
             <button onClick={next} style={{width:"100%",marginTop:14,padding:"13px 0",background:"linear-gradient(135deg,#E67E22,#F39C12)",color:"#fff",border:"none",borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>המשך</button>
-            <div style={{marginTop:20,background:"#F7FAFC",borderRadius:10,padding:12}}>
-              <p style={{color:C.muted,fontSize:11,fontWeight:700,margin:"0 0 7px",textAlign:"center"}}>דוגמאות:</p>
-              {samples.map(function(s) {
-                return (
-                  <div key={s.id} onClick={function(){setIdVal(s.id);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 7px",borderRadius:6,cursor:"pointer"}}
-                    onMouseEnter={function(e){e.currentTarget.style.background="#EDF2F7";}}
-                    onMouseLeave={function(e){e.currentTarget.style.background="transparent";}}>
-                    <span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:C.navy}}>{s.id}</span>
-                    <span style={{fontSize:11,color:C.muted}}>{s.label}</span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
