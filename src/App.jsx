@@ -341,23 +341,38 @@ export default function App() {
   }
 
   // -- Admin registers a day manager to a day --
+  // Admin registers day manager — direct insert, bypasses registration_open
   function handleAdminDmRegister(userId, day) {
-    supabase.rpc("register_day_manager", {p_user_id:userId, p_day:day}).then(function(res){
+    var dayConfig = dayConfs[day] || {maxDayMgr:2};
+    if ((dmOcc[day]||[]).length >= dayConfig.maxDayMgr) {
+      alert("היום מלא — אין מקום לאחראי יום נוסף."); return;
+    }
+    if (dmRegs[userId]) {
+      alert("המשתמש כבר רשום ליום אחר."); return;
+    }
+    supabase.from("day_manager_regs").insert({user_id:userId, day:day}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
-      if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"המשתמש כבר רשום.",registration_closed:"ההרשמה סגורה."};alert(m[res.data.error]||res.data.error);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
     });
   }
 
-  // -- Admin registers a user for a shift --
+  // Admin registers user for shift — direct insert, bypasses registration_open
   function handleAdminRegister(userId,shiftId){
-    supabase.rpc("register_for_shift",{p_user_id:userId,p_shift_id:shiftId}).then(function(res){
+    var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
+    if (regs[userId]) { alert("המשתמש כבר רשום למשמרת אחרת."); return; }
+    if (shift) {
+      var o = occ[shiftId]||{volunteers:[],managers:[]};
+      var u = users[userId];
+      if (u && u.type==="volunteer" && o.volunteers.length >= shift.maxVolunteers) { alert("המשמרת מלאה."); return; }
+      if (u && u.type==="manager"   && o.managers.length   >= shift.maxManagers)   { alert("אין מקום לאחראי משמרת נוסף."); return; }
+    }
+    supabase.from("registrations").insert({user_id:userId, shift_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
-      if(!res.data.success){var m={shift_full:"המשמרת מלאה.",already_registered:"המשתמש כבר רשום.",registration_closed:"ההרשמה סגורה."};alert(m[res.data.error]||res.data.error);return;}
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
-      var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
+      var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
+      dbLog(e); pushLog(setLog,e);
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
     });
@@ -539,6 +554,7 @@ export default function App() {
       onRemove={handleRemove} onDmRemove={handleDmRemove}
       onDeleteUser={handleDeleteUser} onImport={handleImport}
       onAdminRegister={handleAdminRegister}
+      onAdminDmRegister={handleAdminDmRegister}
       onUpdateShift={handleUpdateShift} onAddShift={handleAddShift} onRemoveShift={handleRemoveShift}
       onUpdateDayName={handleUpdateDayName} onUpdateDayConfig={handleUpdateDayConfig}
       onLogout={function(){setMe(null);setLoginErr("");}}
