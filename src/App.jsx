@@ -259,15 +259,10 @@ async function loadAll() {
 }
 
 function dbLog(entry){
-  console.log("dbLog called:", entry.type, entry.userId, entry.userName);
   return supabase.from("activity_log").insert({
     type:entry.type,user_id:entry.userId,user_name:entry.userName,
     shift_id:entry.shiftId,shift_name:entry.shiftName,shift_hours:entry.shiftHours,
     day_label:entry.dayLabel,actor_id:entry.actorId,actor_name:entry.actorName,actor_type:entry.actorType,
-  }).then(function(res){
-    if(res.error) console.error("dbLog error:", res.error.message, JSON.stringify(res.error));
-    else console.log("dbLog success");
-    return res;
   });
 }
 
@@ -376,8 +371,6 @@ export default function App() {
     supabase.from("registrations").insert({user_id:userId, shift_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
-      var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
     });
