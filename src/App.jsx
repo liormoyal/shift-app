@@ -340,6 +340,18 @@ export default function App() {
     });
   }
 
+  // -- Admin registers a day manager to a day --
+  function handleAdminDmRegister(userId, day) {
+    supabase.rpc("register_day_manager", {p_user_id:userId, p_day:day}).then(function(res){
+      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"המשתמש כבר רשום.",registration_closed:"ההרשמה סגורה."};alert(m[res.data.error]||res.data.error);return;}
+      setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
+      var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
+      dbLog(e); pushLog(setLog,e);
+    });
+  }
+
+  // -- Admin registers a user for a shift --
   function handleAdminRegister(userId,shiftId){
     supabase.rpc("register_for_shift",{p_user_id:userId,p_shift_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
@@ -392,7 +404,6 @@ export default function App() {
   }
 
   function handleImport(newArr){
-    // Only send columns that exist in the DB schema
     var cleaned = newArr.map(function(u){
       var obj = {id:u.id, type:u.type, name:u.name};
       if(u.phone)    obj.phone    = u.phone;
@@ -405,8 +416,27 @@ export default function App() {
       if(res.error){alert("שגיאה בייבוא: "+res.error.message);return;}
       setUsers(function(prev){
         var n=Object.assign({},prev);
-        for(var i=0;i<newArr.length;i++){var u=newArr[i];n[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,password:u.password||null,hr:u.hr||null};}
+        for(var i=0;i<newArr.length;i++){
+          var u=newArr[i];
+          n[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,password:u.password||null,hr:u.hr||null};
+        }
         return n;
+      });
+      // Log each imported user
+      var logEntries = newArr.map(function(u){
+        var id=u.id; var existing=users[id];
+        var logType = !existing ? "import_new" : existing.type!==u.type ? "import_role" : "import_update";
+        return{type:logType,user_id:id,user_name:u.name,actor_id:me.id,actor_name:me.name,actor_type:me.type};
+      });
+      // Insert log entries one by one
+      logEntries.forEach(function(e){ supabase.from("activity_log").insert(e); });
+      setLog(function(prev){
+        var newEntries = logEntries.map(function(e){
+          return{id:Date.now()+Math.random(),type:e.type,userId:e.user_id,userName:e.user_name,
+            shiftId:null,shiftName:null,shiftHours:null,dayLabel:null,
+            actorId:e.actor_id,actorName:e.actor_name,actorType:e.actor_type,ts:new Date().toISOString()};
+        });
+        return newEntries.concat(prev);
       });
     });
   }
@@ -538,7 +568,6 @@ export default function App() {
   );
 }
 
-// --- Small shared components -------------------------------------------------
 function Hdr(props) {
   return (
     <header dir="rtl" style={{background:props.bg||C.navy,color:"#fff",padding:"0 20px",height:60,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:99,boxShadow:"0 2px 10px rgba(0,0,0,.3)"}}>
@@ -582,7 +611,7 @@ function Bar(props) {
   );
 }
 
-// --- LOGIN -------------------------------------------------------------------
+// ─── LOGIN ───────────────────────────────────────────────────────────────────
 function LoginScreen(props) {
   var si = useState(""); var idVal = si[0]; var setIdVal = si[1];
   var sp = useState(""); var passVal = sp[0]; var setPassVal = sp[1];
@@ -609,8 +638,8 @@ function LoginScreen(props) {
   ];
 
   return (
-    <div dir="rtl" style={{minHeight:"100vh",background:"linear-gradient(160deg,#0F2D4A 0%,#1B4F72 60%,#1A5276 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
-      <div style={{background:C.card,borderRadius:20,padding:"36px 32px",width:"100%",maxWidth:390,boxShadow:"0 30px 80px rgba(0,0,0,.45)"}}>
+    <div dir="rtl" style={{minHeight:"100vh",background:"url('/login-bg.jpg') center center / cover no-repeat",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
+      <div style={{background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",borderRadius:20,padding:"36px 32px",width:"100%",maxWidth:390,boxShadow:"0 30px 80px rgba(0,0,0,.5)"}}>
         <div style={{textAlign:"center",marginBottom:26}}>
           <div style={{width:64,height:64,background:"linear-gradient(135deg,#E67E22,#F39C12)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 12px",boxShadow:"0 6px 20px rgba(230,126,34,.4)"}}>🗓</div>
           <h2 style={{color:C.navy,margin:"0 0 4px",fontSize:24,fontWeight:800}}>רישום משמרות</h2>
@@ -623,6 +652,19 @@ function LoginScreen(props) {
               style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid " + (props.error?C.red:"#CBD5E0"),fontSize:22,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",direction:"ltr",fontFamily:"monospace",color:C.navy,fontWeight:700}} />
             {props.error && <div style={{background:"#FEF2F2",border:"1px solid "+C.red,borderRadius:8,padding:"7px 12px",marginTop:8,color:C.red,fontSize:13,textAlign:"center"}}>{props.error}</div>}
             <button onClick={next} style={{width:"100%",marginTop:14,padding:"13px 0",background:"linear-gradient(135deg,#E67E22,#F39C12)",color:"#fff",border:"none",borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>המשך</button>
+            <div style={{marginTop:20,background:"#F7FAFC",borderRadius:10,padding:12}}>
+              <p style={{color:C.muted,fontSize:11,fontWeight:700,margin:"0 0 7px",textAlign:"center"}}>דוגמאות:</p>
+              {samples.map(function(s) {
+                return (
+                  <div key={s.id} onClick={function(){setIdVal(s.id);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 7px",borderRadius:6,cursor:"pointer"}}
+                    onMouseEnter={function(e){e.currentTarget.style.background="#EDF2F7";}}
+                    onMouseLeave={function(e){e.currentTarget.style.background="transparent";}}>
+                    <span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:C.navy}}>{s.id}</span>
+                    <span style={{fontSize:11,color:C.muted}}>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -647,7 +689,7 @@ function LoginScreen(props) {
   );
 }
 
-// --- VOLUNTEER VIEW -----------------------------------------------------------
+// ─── VOLUNTEER VIEW ───────────────────────────────────────────────────────────
 function VolView(props) {
   var sf = useState("all"); var filterDay = sf[0]; var setFilterDay = sf[1];
   var sc = useState(null); var confirming = sc[0]; var setConfirming = sc[1];
@@ -790,7 +832,7 @@ function VolView(props) {
   );
 }
 
-// --- DAY MANAGER VIEW ---------------------------------------------------------
+// ─── DAY MANAGER VIEW ─────────────────────────────────────────────────────────
 function DayMgrView(props) {
   var sc = useState(null); var confirming = sc[0]; var setConfirming = sc[1];
   var sv = useState("register"); var view = sv[0]; var setView = sv[1];
@@ -885,8 +927,8 @@ function DayMgrView(props) {
   );
 }
 
-// --- ADMIN PANEL -------------------------------------------------------------
-// --- ROSTER VIEW (names only, visible to all users) ---------------------------
+// ─── ADMIN PANEL ─────────────────────────────────────────────────────────────
+// ─── ROSTER VIEW (names only, visible to all users) ───────────────────────────
 function RosterView(props) {
   var sf = useState("all"); var filterDay = sf[0]; var setFilterDay = sf[1];
   var visibleDays = filterDay === "all" ? DAYS : [Number(filterDay)];
@@ -1096,20 +1138,32 @@ function AdminPanel(props) {
             onClose={function(){ setSelectedShift(null); }}
           />
         )}
-        {tab === "day"          && <DayView    shifts={props.shifts} occ={props.occ} dmOcc={props.dmOcc} dayNames={props.dayNames} dayConfigs={props.dayConfigs} users={props.users} filterDay={filterDay} />}
+        {tab === "day"          && <DayView    shifts={props.shifts} occ={props.occ} dmOcc={props.dmOcc} dayNames={props.dayNames} dayConfigs={props.dayConfigs} users={props.users} filterDay={filterDay} regs={props.dmRegs} onDayClick={function(day){setSelectedShift({isDayMgr:true,day:day});}} />}
+        {selectedShift && selectedShift.isDayMgr && (
+          <AdminDayMgrModal
+            day={selectedShift.day}
+            users={props.users}
+            dmRegs={props.dmRegs}
+            dmOcc={props.dmOcc}
+            dayConfigs={props.dayConfigs}
+            dayNames={props.dayNames}
+            onRegister={function(userId){ props.onAdminDmRegister(userId, selectedShift.day); setSelectedShift(null); }}
+            onClose={function(){ setSelectedShift(null); }}
+          />
+        )}
         {tab === "table"        && <RegTable   regList={regList} search={search} onSearch={setSearch} dayNames={props.dayNames} removing={removing} onRemove={function(c){props.onRemove(c);setRemoving(null);}} onSetRemoving={setRemoving} />}
         {tab === "allusers"     && <AllUsers   users={props.users} shifts={props.shifts} regs={props.regs} dmRegs={props.dmRegs} dayNames={props.dayNames} isSup={props.isSup} onDeleteUser={props.onDeleteUser} onDmRemove={props.onDmRemove} />}
         {tab === "unregistered" && <Unreg      users={props.users} regs={props.regs} dmRegs={props.dmRegs} />}
         {tab === "log"          && <LogView    log={props.log} dayNames={props.dayNames} />}
-        {tab === "import"       && props.isSup && <ImportView users={props.users} onImport={props.onImport} />}
+        {tab === "import"       && props.isSup && <ImportView users={props.users} regs={props.regs} dmRegs={props.dmRegs} shifts={props.shifts} dayNames={props.dayNames} onImport={props.onImport} />}
         {tab === "config"       && props.isSup && <ConfigView shiftMap={props.shiftMap} dayNames={props.dayNames} dayConfigs={props.dayConfigs} occ={props.occ} dmOcc={props.dmOcc} regs={props.regs} onUpdateShift={props.onUpdateShift} onAddShift={props.onAddShift} onRemoveShift={props.onRemoveShift} onUpdateDayName={props.onUpdateDayName} onUpdateDayConfig={props.onUpdateDayConfig} allowSelfRemove={props.allowSelfRemove} onToggleSelfRemove={props.onToggleSelfRemove} />}
       </div>
     </div>
   );
 }
 
-// --- SHIFTS GRID -------------------------------------------------------------
-// --- ADMIN REGISTER MODAL ----------------------------------------------------
+// ─── SHIFTS GRID ─────────────────────────────────────────────────────────────
+// ─── ADMIN REGISTER MODAL ────────────────────────────────────────────────────
 function AdminRegisterModal(props) {
   var ss = useState(""); var search = ss[0]; var setSearch = ss[1];
   var st = useState("volunteer"); var regType = st[0]; var setRegType = st[1];
@@ -1218,6 +1272,102 @@ function AdminRegisterModal(props) {
   );
 }
 
+// --- ADMIN DAY MANAGER MODAL -------------------------------------------------
+function AdminDayMgrModal(props) {
+  var ss = useState(""); var search = ss[0]; var setSearch = ss[1];
+  var day = props.day;
+  var occupied = (props.dmOcc[day]||[]).length;
+  var maxSlots = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
+  var isFull = occupied >= maxSlots;
+
+  var registeredDmIds = {};
+  var dmkeys = Object.keys(props.dmRegs);
+  for (var i = 0; i < dmkeys.length; i++) registeredDmIds[dmkeys[i]] = true;
+
+  var candidates = [];
+  var ukeys = Object.keys(props.users);
+  for (var j = 0; j < ukeys.length; j++) {
+    var id = ukeys[j];
+    var u = props.users[id];
+    if (u.type !== "day_manager") continue;
+    if (registeredDmIds[id]) continue;
+    if (search) {
+      var q = search.toLowerCase();
+      if ((u.name||"").toLowerCase().indexOf(q) < 0 && id.indexOf(q) < 0) continue;
+    }
+    candidates.push({id:id, u:u});
+  }
+  candidates.sort(function(a,b){ return (a.u.name||"").localeCompare(b.u.name||"","he"); });
+
+  var currentMgrs = (props.dmOcc[day]||[]).map(function(id){ return props.users[id]; }).filter(Boolean);
+
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={props.onClose}>
+      <div dir="rtl" style={{background:C.card,borderRadius:18,width:"100%",maxWidth:480,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.4)"}} onClick={function(e){e.stopPropagation();}}>
+
+        <div style={{background:C.teal,borderRadius:"18px 18px 0 0",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{color:"#fff",fontWeight:800,fontSize:16}}>📋 רישום אחראי יום</div>
+            <div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:2}}>{props.dayNames[day]||("יום "+day)}</div>
+          </div>
+          <button onClick={props.onClose} style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,fontWeight:700}}>×</button>
+        </div>
+
+        <div style={{padding:"12px 20px",borderBottom:"1px solid #EEF2F7",background:"#F0FDF9"}}>
+          <div style={{fontSize:12,color:C.teal,fontWeight:700,marginBottom:6}}>
+            נרשמו: {occupied}/{maxSlots} אחראי יום
+          </div>
+          {currentMgrs.length > 0 && (
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {currentMgrs.map(function(m,i){
+                return (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#CCFBF1",borderRadius:7,padding:"4px 10px"}}>
+                    <div style={{width:22,height:22,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
+                    <span style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{padding:"12px 20px",borderBottom:"1px solid #EEF2F7"}}>
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש שם או ת.ז..." autoFocus
+            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"2px solid #CBD5E0",fontSize:13,outline:"none",boxSizing:"border-box"}} />
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"8px 12px"}}>
+          {isFull && <div style={{textAlign:"center",padding:"20px 0",color:C.teal,fontSize:13,fontWeight:600}}>היום מלא ({maxSlots}/{maxSlots} אחראי יום)</div>}
+          {!isFull && !candidates.length && <div style={{textAlign:"center",padding:"20px 0",color:C.muted,fontSize:13}}>{search?"לא נמצאו תוצאות":"כל אחראי היום כבר רשומים"}</div>}
+          {!isFull && candidates.map(function(c) {
+            return (
+              <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 8px",borderRadius:9,marginBottom:4,cursor:"pointer"}}
+                onMouseEnter={function(e){e.currentTarget.style.background="#F0FDF9";}}
+                onMouseLeave={function(e){e.currentTarget.style.background="transparent";}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:"#CCFBF1",color:C.teal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,flexShrink:0}}>
+                  {(c.u.name||"?").charAt(0)}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:C.text}}>{c.u.name}</div>
+                  <div style={{display:"flex",gap:10,marginTop:2}}>
+                    <span style={{fontSize:11,color:C.muted,fontFamily:"monospace"}}>ת.ז. {c.id}</span>
+                    {c.u.phone && <span style={{fontSize:11,color:C.muted}}>{c.u.phone}</span>}
+                    {c.u.hr && <span style={{fontSize:11,background:"#F0F4F8",borderRadius:4,padding:"1px 6px",color:C.navy}}>{c.u.hr}</span>}
+                  </div>
+                </div>
+                <button onClick={function(){ props.onRegister(c.id); }}
+                  style={{padding:"7px 16px",borderRadius:8,border:"none",background:C.teal,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",flexShrink:0}}>
+                  רשום
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShiftsGrid(props) {
   var visibleDays = props.filterDay === "all" ? DAYS : [Number(props.filterDay)];
   var clickable = !!props.onShiftClick;
@@ -1270,7 +1420,7 @@ function ShiftsGrid(props) {
   );
 }
 
-// --- DAY VIEW -----------------------------------------------------------------
+// ─── DAY VIEW ─────────────────────────────────────────────────────────────────
 function DayView(props) {
   var visibleDays = props.filterDay === "all" ? DAYS : [Number(props.filterDay)];
   return (
@@ -1288,9 +1438,17 @@ function DayView(props) {
         var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
         return (
           <div key={day} style={{background:C.card,borderRadius:16,marginBottom:20,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden"}}>
-            <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:18,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
-              <span style={{fontSize:12,opacity:.7}}>{totalReg} נרשמים - {dayShifts.length} משמרות</span>
+            <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
+                <span style={{fontSize:12,opacity:.7}}>{totalReg} נרשמים - {dayShifts.length} משמרות</span>
+              </div>
+              {props.onDayClick && (
+                <button onClick={function(){props.onDayClick(day);}}
+                  style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.4)",color:"#fff",borderRadius:8,padding:"5px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                  + רשום אחראי יום
+                </button>
+              )}
             </div>
             <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
               <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,textTransform:"uppercase",letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
@@ -1368,7 +1526,7 @@ function DayView(props) {
   );
 }
 
-// --- REGISTRATION TABLE -------------------------------------------------------
+// ─── REGISTRATION TABLE ───────────────────────────────────────────────────────
 function RegTable(props) {
   return (
     <div>
@@ -1433,7 +1591,7 @@ function RegTable(props) {
   );
 }
 
-// --- ALL USERS ----------------------------------------------------------------
+// ─── ALL USERS ────────────────────────────────────────────────────────────────
 function AllUsers(props) {
   var ss = useState(""); var search = ss[0]; var setSearch = ss[1];
   var sf = useState("all"); var ft = sf[0]; var setFt = sf[1];
@@ -1570,7 +1728,7 @@ function AllUsers(props) {
   );
 }
 
-// --- UNREGISTERED -------------------------------------------------------------
+// ─── UNREGISTERED ─────────────────────────────────────────────────────────────
 function Unreg(props) {
   var sf = useState("all"); var ft = sf[0]; var setFt = sf[1];
   var ss = useState(""); var search = ss[0]; var setSearch = ss[1];
@@ -1677,7 +1835,7 @@ function Unreg(props) {
   );
 }
 
-// --- LOG ----------------------------------------------------------------------
+// ─── LOG ──────────────────────────────────────────────────────────────────────
 function LogView(props) {
   var sf = useState("all"); var ft = sf[0]; var setFt = sf[1];
   var ss = useState(""); var search = ss[0]; var setSearch = ss[1];
@@ -1686,14 +1844,21 @@ function LogView(props) {
     if(search){var q=search.toLowerCase();return (e.userName||"").toLowerCase().indexOf(q)>=0||(e.userId||"").indexOf(q)>=0||(e.actorName||"").toLowerCase().indexOf(q)>=0;}
     return true;
   });
-  var TM = {register:{label:"רישום",col:C.green,bg:"#D5F5E3"},remove:{label:"הסרה",col:C.red,bg:"#FEF2F2"},delete_user:{label:"מחיקה",col:C.amber,bg:"#FEF3C7"}};
+  var TM = {
+    register:      {label:"רישום",              col:C.green,  bg:"#D5F5E3"},
+    remove:        {label:"הסרה",               col:C.red,    bg:"#FEF2F2"},
+    delete_user:   {label:"מחיקת משתמש",        col:C.amber,  bg:"#FEF3C7"},
+    import_new:    {label:"ייבוא",              col:C.teal,   bg:"#CCFBF1"},
+    import_update: {label:"ייבוא - עדכון פרטים",col:C.blue,   bg:"#DBEAFE"},
+    import_role:   {label:"ייבוא - עדכון תפקיד",col:C.purple, bg:"#EDE9FE"},
+  };
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש..."
           style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,outline:"none",width:"100%",maxWidth:250,boxSizing:"border-box"}} />
         <div style={{display:"flex",gap:5}}>
-          {[["all","הכל"],["register","רישומים"],["remove","הסרות"],["delete_user","מחיקות"]].map(function(p){
+          {[["all","הכל"],["register","רישומים"],["remove","הסרות"],["delete_user","מחיקות"],["import_new","ייבוא"],["import_update","עדכון פרטים"],["import_role","עדכון תפקיד"]].map(function(p){
             return <button key={p[0]} onClick={function(){setFt(p[0]);}} style={{padding:"5px 11px",borderRadius:18,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:ft===p[0]?C.navy:"#fff",color:ft===p[0]?"#fff":C.muted,boxShadow:ft===p[0]?"0 2px 8px rgba(15,45,74,.3)":"0 1px 3px rgba(0,0,0,.1)"}}>{p[1]}</button>;
           })}
         </div>
@@ -1734,7 +1899,7 @@ function LogView(props) {
   );
 }
 
-// --- CONFIG (superadmin) -----------------------------------------------------
+// ─── CONFIG (superadmin) ─────────────────────────────────────────────────────
 function ConfigView(props) {
   var si = useState(null); var iconPicker = si[0]; var setIconPicker = si[1];
   var sc = useState(null); var confirmDel = sc[0]; var setConfirmDel = sc[1];
@@ -1903,7 +2068,7 @@ function ConfigView(props) {
   );
 }
 
-// --- IMPORT -------------------------------------------------------------------
+// --- IMPORT ------------------------------------------------------------------
 function ImportView(props) {
   var sr = useRef(null);
   var sp = useState(null); var preview = sp[0]; var setPreview = sp[1];
@@ -1914,15 +2079,59 @@ function ImportView(props) {
     if (!file) return;
     setPreview(null); setStatus(null);
     parseImport(file,
-      function(users, warnings) { setPreview({users:users, warnings:warnings}); },
+      function(usersObj, warnings) { setPreview({users:usersObj, warnings:warnings}); },
       function(errors) { setStatus({ok:false, errors:errors}); }
     );
   }
 
+  // Find conflicts: existing user whose type changes AND is registered to a shift/day
+  function findConflicts(usersObj) {
+    var conflicts = [];
+    var ids = Object.keys(usersObj);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var newU = usersObj[id];
+      var existing = props.users[id];
+      if (!existing) continue;
+      if (existing.type === newU.type) continue;
+      // Type is changing — check if registered
+      var shiftId = props.regs[id] || null;
+      var dayNum  = props.dmRegs[id] || null;
+      if (shiftId || dayNum) {
+        var shift = null;
+        if (shiftId) {
+          for (var j = 0; j < props.shifts.length; j++) {
+            if (props.shifts[j].id === shiftId) { shift = props.shifts[j]; break; }
+          }
+        }
+        conflicts.push({
+          id: id,
+          name: existing.name,
+          currentType: existing.type,
+          newType: newU.type,
+          shiftId: shiftId,
+          shiftName: shift ? shift.name : null,
+          dayNum: dayNum,
+          dayLabel: dayNum ? (props.dayNames[dayNum] || ("יום " + dayNum)) : null,
+        });
+      }
+    }
+    return conflicts;
+  }
+
   function commit() {
     if (!preview) return;
-    props.onImport(preview.users);
-    setStatus({ok:true, count:Object.keys(preview.users).length});
+    var conflicts = findConflicts(preview.users);
+    if (conflicts.length > 0) {
+      setStatus({ok:false, conflicts:conflicts});
+      setPreview(null);
+      return;
+    }
+    var arr = Object.keys(preview.users).map(function(id) {
+      return Object.assign({id:id}, preview.users[id]);
+    });
+    props.onImport(arr);
+    setStatus({ok:true, count:arr.length});
     setPreview(null);
   }
 
@@ -1932,8 +2141,9 @@ function ImportView(props) {
     <div style={{maxWidth:720}}>
       <div style={{background:C.card,borderRadius:14,padding:"18px 22px",boxShadow:"0 2px 8px rgba(0,0,0,.08)",marginBottom:20}}>
         <h3 style={{color:C.navy,margin:"0 0 5px",fontSize:17,fontWeight:800}}>ייבוא משתמשים מאקסל</h3>
-        <p style={{color:C.muted,margin:0,fontSize:12,lineHeight:1.6}}>עמודות: id, type, name, phone, email, password<br/>סוגים: volunteer, manager, day_manager, admin, superadmin<br/>ייבוא כפול: פרטים מתעדכנים, שיבוץ נשמר.</p>
+        <p style={{color:C.muted,margin:0,fontSize:12,lineHeight:1.6}}>עמודות: id, type, name, phone, email, password, hr<br/>סוגים: volunteer, manager, day_manager, admin, superadmin<br/>ייבוא כפול: פרטים מתעדכנים, שיבוץ נשמר. שינוי תפקיד — אסור אם המשתמש רשום.</p>
       </div>
+
       <div style={{border:"2.5px dashed "+(dragging?"#2563EB":"#CBD5E0"),borderRadius:14,padding:"38px 28px",textAlign:"center",cursor:"pointer",background:dragging?"#EFF6FF":"#F8FAFC"}}
         onClick={function(){if(sr.current)sr.current.click();}}
         onDragOver={function(e){e.preventDefault();setDragging(true);}}
@@ -1953,19 +2163,23 @@ function ImportView(props) {
           </div>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:460}}>
-              <thead><tr style={{background:"#F8FAFC"}}>{["ת.ז.","סוג","שם","טלפון"].map(function(h,i){return <th key={i} style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:C.muted,fontSize:11}}>{h}</th>;})}</tr></thead>
+              <thead><tr style={{background:"#F8FAFC"}}>{["ת.ז.","מצב","סוג חדש","שם","טלפון"].map(function(h,i){return <th key={i} style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:C.muted,fontSize:11}}>{h}</th>;})}</tr></thead>
               <tbody>
                 {previewKeys.slice(0,20).map(function(id,i){
                   var u = preview.users[id];
                   var tm = TYPE_INFO[u.type] || {label:u.type,bg:"#F1F5F9",col:C.muted};
-                  var isNew = !props.users[id];
+                  var existing = props.users[id];
+                  var isNew = !existing;
+                  var roleChanged = existing && existing.type !== u.type;
                   return (
                     <tr key={id} style={{background:i%2===0?"#fff":"#F8FAFC",borderBottom:"1px solid #EEF2F7"}}>
-                      <td style={{padding:"8px 12px",fontFamily:"monospace",fontSize:11}}>
-                        {id}
+                      <td style={{padding:"8px 12px",fontFamily:"monospace",fontSize:11}}>{id}</td>
+                      <td style={{padding:"8px 12px"}}>
                         {isNew
-                          ? <span style={{marginRight:5,background:"#D1FAE5",color:C.green,borderRadius:4,padding:"1px 6px",fontSize:9,fontWeight:700}}>חדש</span>
-                          : <span style={{marginRight:5,background:"#FEF3C7",color:C.amber,borderRadius:4,padding:"1px 6px",fontSize:9,fontWeight:700}}>עדכון</span>
+                          ? <span style={{background:"#D1FAE5",color:C.green,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>חדש</span>
+                          : roleChanged
+                            ? <span style={{background:"#FEF3C7",color:C.amber,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>שינוי תפקיד</span>
+                            : <span style={{background:"#EFF6FF",color:C.blue,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>עדכון פרטים</span>
                         }
                       </td>
                       <td style={{padding:"8px 12px"}}><span style={{background:tm.bg,color:tm.col,borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700}}>{tm.label}</span></td>
@@ -1974,10 +2188,49 @@ function ImportView(props) {
                     </tr>
                   );
                 })}
-                {previewKeys.length>20 && <tr><td colSpan={4} style={{padding:"8px 12px",textAlign:"center",color:C.muted,fontSize:11}}>+ עוד {previewKeys.length-20}...</td></tr>}
+                {previewKeys.length>20 && <tr><td colSpan={5} style={{padding:"8px 12px",textAlign:"center",color:C.muted,fontSize:11}}>+ עוד {previewKeys.length-20}...</td></tr>}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Conflict errors */}
+      {status && !status.ok && status.conflicts && (
+        <div style={{marginTop:14,background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:11,padding:"16px 20px"}}>
+          <div style={{fontSize:15,fontWeight:800,color:C.red,marginBottom:12}}>הייבוא נחסם — יש משתמשים רשומים שמנסים לשנות תפקיד:</div>
+          {status.conflicts.map(function(c,i){
+            var curTm = TYPE_INFO[c.currentType]||{label:c.currentType,bg:"#F1F5F9",col:C.muted};
+            var newTm = TYPE_INFO[c.newType]||{label:c.newType,bg:"#F1F5F9",col:C.muted};
+            return (
+              <div key={i} style={{background:"#fff",borderRadius:9,padding:"12px 16px",marginBottom:8,border:"1px solid #FED7D7"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+                  <div style={{fontWeight:800,fontSize:14,color:C.text}}>{c.name}</div>
+                  <span style={{fontFamily:"monospace",fontSize:11,color:C.muted}}>ת.ז. {c.id}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                  <span style={{fontSize:12,color:C.muted}}>תפקיד נוכחי:</span>
+                  <span style={{background:curTm.bg,color:curTm.col,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700}}>{curTm.label}</span>
+                  <span style={{fontSize:12,color:C.muted}}>← תפקיד חדש:</span>
+                  <span style={{background:newTm.bg,color:newTm.col,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700}}>{newTm.label}</span>
+                </div>
+                <div style={{fontSize:12,color:C.red,fontWeight:600}}>
+                  {c.shiftName
+                    ? "רשום/ה למשמרת: " + c.shiftName + (c.dayLabel ? " (" + c.dayLabel + ")" : "")
+                    : "רשום/ה כאחראי/ת יום: " + (c.dayLabel||"")
+                  }
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:4}}>יש להסיר את הרישום לפני שינוי התפקיד.</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {status && !status.ok && status.errors && (
+        <div style={{marginTop:14,background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:11,padding:"14px 18px"}}>
+          <div style={{fontSize:13,fontWeight:800,color:C.red,marginBottom:6}}>שגיאות:</div>
+          {status.errors.map(function(e,i){ return <div key={i} style={{fontSize:12,color:C.red}}>- {e}</div>; })}
         </div>
       )}
 
@@ -1987,12 +2240,7 @@ function ImportView(props) {
           <div style={{fontSize:11,color:C.muted,marginTop:3}}>שיבוצים קיימים נשמרו.</div>
         </div>
       )}
-      {status && !status.ok && (
-        <div style={{marginTop:14,background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:11,padding:"14px 18px"}}>
-          <div style={{fontSize:13,fontWeight:800,color:C.red,marginBottom:6}}>שגיאות בקובץ:</div>
-          {status.errors.map(function(e,i){ return <div key={i} style={{fontSize:12,color:C.red}}>- {e}</div>; })}
-        </div>
-      )}
     </div>
   );
 }
+
