@@ -1636,6 +1636,9 @@ function AllUsers(props) {
     if (!props.isSup && (u.type === "admin" || u.type === "superadmin")) continue;
     if (ft !== "all" && u.type !== ft) continue;
     if (search) {
+
+
+
       var q = search.toLowerCase();
       if ((u.name||"").toLowerCase().indexOf(q)<0 && id.indexOf(q)<0 && (u.phone||"").indexOf(q)<0) continue;
     }
