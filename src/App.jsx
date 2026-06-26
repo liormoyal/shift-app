@@ -2199,6 +2199,13 @@ function ImportView(props) {
                   var existing = props.users[id];
                   var isNew = !existing;
                   var roleChanged = existing && existing.type !== u.type;
+                  var detailsChanged = existing && !roleChanged && (
+                    existing.name !== u.name ||
+                    (existing.phone||"") !== (u.phone||"") ||
+                    (existing.email||"") !== (u.email||"") ||
+                    (existing.hr||"") !== (u.hr||"") ||
+                    (existing.password||"") !== (u.password||"")
+                  );
                   return (
                     <tr key={id} style={{background:i%2===0?"#fff":"#F8FAFC",borderBottom:"1px solid #EEF2F7"}}>
                       <td style={{padding:"8px 12px",fontFamily:"monospace",fontSize:11}}>{id}</td>
@@ -2206,8 +2213,10 @@ function ImportView(props) {
                         {isNew
                           ? <span style={{background:"#D1FAE5",color:C.green,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>חדש</span>
                           : roleChanged
-                            ? <span style={{background:"#FEF3C7",color:C.amber,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>שינוי תפקיד</span>
-                            : <span style={{background:"#EFF6FF",color:C.blue,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>עדכון פרטים</span>
+                            ? <span style={{background:"#FEF3C7",color:C.amber,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>עדכון תפקיד</span>
+                            : detailsChanged
+                              ? <span style={{background:"#EFF6FF",color:C.blue,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>עדכון פרטים</span>
+                              : <span style={{background:"#F1F5F9",color:C.muted,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>ללא עדכון</span>
                         }
                       </td>
                       <td style={{padding:"8px 12px"}}><span style={{background:tm.bg,color:tm.col,borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700}}>{tm.label}</span></td>
