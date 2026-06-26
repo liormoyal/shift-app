@@ -259,10 +259,12 @@ async function loadAll() {
 }
 
 function dbLog(entry){
-  return supabase.from("activity_log").insert({
+  supabase.from("activity_log").insert({
     type:entry.type,user_id:entry.userId,user_name:entry.userName,
     shift_id:entry.shiftId,shift_name:entry.shiftName,shift_hours:entry.shiftHours,
     day_label:entry.dayLabel,actor_id:entry.actorId,actor_name:entry.actorName,actor_type:entry.actorType,
+  }).then(function(res){
+    if(res.error) console.error("LOG FAILED:", res.error.code, res.error.message);
   });
 }
 
