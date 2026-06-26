@@ -672,7 +672,29 @@ function LoginScreen(props) {
       <div style={{background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",borderRadius:20,padding:"36px 32px",width:"100%",maxWidth:390,boxShadow:"0 30px 80px rgba(0,0,0,.5)"}}>
         <div style={{textAlign:"center",marginBottom:26}}>
           <div style={{width:64,height:64,background:"linear-gradient(135deg,#E67E22,#F39C12)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 12px",boxShadow:"0 6px 20px rgba(230,126,34,.4)"}}>🗓</div>
-          <h2 style={{color:C.navy,margin:"0 0 4px",fontSize:24,fontWeight:800}}>רישום משמרות</h2>
+<div style={{marginBottom:4}}>
+  <div
+    style={{
+      color: C.amber,
+      fontSize: 14,
+      fontWeight: 700,
+      marginBottom: 4
+    }}
+  >
+    מידברן 2026 - מחלקת תנועה
+  </div>
+
+  <h2
+    style={{
+      color: C.navy,
+      margin: 0,
+      fontSize: 24,
+      fontWeight: 800
+    }}
+  >
+    רישום משמרות
+  </h2>
+</div>
           <p style={{color:C.muted,margin:0,fontSize:13}}>{step==="id"?"הזן/י מספר תעודת זהות":"הזן/י סיסמה להמשך"}</p>
         </div>
 
