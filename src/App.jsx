@@ -1635,13 +1635,7 @@ function AllUsers(props) {
     var u = props.users[id];
     if (!props.isSup && (u.type === "admin" || u.type === "superadmin")) continue;
     if (ft !== "all" && u.type !== ft) continue;
-    if (search) {
 
-
-
-      var q = search.toLowerCase();
-      if ((u.name||"").toLowerCase().indexOf(q)<0 && id.indexOf(q)<0 && (u.phone||"").indexOf(q)<0) continue;
-    }
     var shiftId = props.regs[id] || null;
     var shift = null;
     if (shiftId) {
@@ -1650,6 +1644,24 @@ function AllUsers(props) {
       }
     }
     var dayNum = props.dmRegs[id] || null;
+
+    if (search) {
+      var q = search.toLowerCase();
+      var typeLabel = (TYPE_INFO[u.type] || {}).label || u.type || "";
+      var statusText = (u.type === "admin" || u.type === "superadmin") ? "" : ((shiftId || dayNum) ? "נרשם" : "לא נרשם");
+      var assignTextSearch = "";
+      if (shift) {
+        assignTextSearch = [shift.icon, props.dayNames[shift.day] || ("יום " + shift.day), shift.name, shift.hours].join(" ");
+      } else if (dayNum) {
+        assignTextSearch = ["אחראי יום", props.dayNames[dayNum] || ("יום " + dayNum)].join(" ");
+      }
+      var haystack = [
+        id, u.type, typeLabel, u.name, u.phone, u.email, u.hr, u.password,
+        statusText, shiftId, assignTextSearch
+      ].join(" ").toLowerCase();
+      if (haystack.indexOf(q) < 0) continue;
+    }
+
     allList.push({id:id, u:u, shift:shift, shiftId:shiftId, dayNum:dayNum});
   }
   var ORDER = {superadmin:0,admin:1,day_manager:2,manager:3,volunteer:4};
@@ -1668,7 +1680,7 @@ function AllUsers(props) {
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש..."
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="חפש בכל השדות..."
           style={{padding:"9px 14px",borderRadius:9,border:"2px solid #CBD5E0",fontSize:13,color:"#1A202C",background:"#fff",outline:"none",width:"100%",maxWidth:260,boxSizing:"border-box"}} />
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {pills.map(function(p) {
