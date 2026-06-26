@@ -263,6 +263,9 @@ function dbLog(entry){
     type:entry.type,user_id:entry.userId,user_name:entry.userName,
     shift_id:entry.shiftId,shift_name:entry.shiftName,shift_hours:entry.shiftHours,
     day_label:entry.dayLabel,actor_id:entry.actorId,actor_name:entry.actorName,actor_type:entry.actorType,
+  }).then(function(res){
+    if(res.error) console.error("dbLog error:", res.error.message, res.error);
+    return res;
   });
 }
 
