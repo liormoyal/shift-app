@@ -260,7 +260,7 @@ async function loadAll() {
 
 // --- Monday.com sync --------------------------------------------------------
 var MONDAY_BOARD_ID = "18419606261";
-var MONDAY_API_KEY  = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY3NjAzMTQ0NywiYWFpIjoxMSwidWlkIjo4MDAxNzA3NSwiaWFkIjoiMjAyNi0wNi0yN1QwODowMDo0NC44MTlaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTEyMDIxNTQsInJnbiI6InVzZTEifQ.CfxMvONNSkGrjK1kejNSd5isFWyWwRUuQSFvzUvAy3A"; // החלף ב-API key החדש שלך
+var MONDAY_API_KEY  = "REPLACE_WITH_NEW_API_KEY"; // החלף ב-API key החדש שלך
 
 function mondayQuery(query) {
   return fetch("https://api.monday.com/v2", {
@@ -275,14 +275,28 @@ function mondayQuery(query) {
 
 // Find the Monday item ID where the "name" column matches the given ID number
 function findMondayItem(idNumber) {
-  var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id column_values(ids: ["name"]) { text } } } } }';
+  var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id name column_values(ids: ["name"]) { text } } } } }';
   return mondayQuery(q).then(function(data) {
-    var items = data.data.boards[0].items_page.items;
-    for (var i = 0; i < items.length; i++) {
-      var nameVal = items[i].column_values[0].text;
-      if (nameVal === idNumber) return items[i].id;
+    try {
+      var items = data.data.boards[0].items_page.items;
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        // Try column_values first, fall back to item name
+        var nameVal = "";
+        if (item.column_values && item.column_values[0]) {
+          nameVal = item.column_values[0].text || "";
+        }
+        if (!nameVal) nameVal = item.name || "";
+        if (nameVal === idNumber || nameVal.trim() === idNumber.trim()) {
+          return item.id;
+        }
+      }
+      console.warn("Monday: no item found for ID", idNumber);
+      return null;
+    } catch(err) {
+      console.error("Monday findMondayItem error:", err, JSON.stringify(data));
+      return null;
     }
-    return null;
   });
 }
 
