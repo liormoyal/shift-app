@@ -260,14 +260,14 @@ async function loadAll() {
 
 // --- Monday.com sync --------------------------------------------------------
 var MONDAY_BOARD_ID = "18419606261";
-var MONDAY_API_KEY  = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY3NjAzMTQ0NywiYWFpIjoxMSwidWlkIjo4MDAxNzA3NSwiaWFkIjoiMjAyNi0wNi0yN1QwODowMDo0NC44MTlaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTEyMDIxNTQsInJnbiI6InVzZTEifQ.CfxMvONNSkGrjK1kejNSd5isFWyWwRUuQSFvzUvAy3A";
+var MONDAY_API_KEY  = import.meta.env.VITE_MONDAY_API_KEY;
 
 function mondayQuery(query) {
   return fetch("https://api.monday.com/v2", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY3NjAzMTQ0NywiYWFpIjoxMSwidWlkIjo4MDAxNzA3NSwiaWFkIjoiMjAyNi0wNi0yN1QwODowMDo0NC44MTlaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTEyMDIxNTQsInJnbiI6InVzZTEifQ.CfxMvONNSkGrjK1kejNSd5isFWyWwRUuQSFvzUvAy3A,
+      "Authorization": MONDAY_API_KEY,
     },
     body: JSON.stringify({query: query}),
   }).then(function(r){ return r.json(); });
