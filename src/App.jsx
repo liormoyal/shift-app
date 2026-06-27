@@ -258,6 +258,53 @@ async function loadAll() {
   return{users,shiftMap,regs,dmRegs,dayConfigs,dayNames,regOpen,allowSelfRemove,log};
 }
 
+// --- Monday.com sync --------------------------------------------------------
+var MONDAY_BOARD_ID = "18419606261";
+var MONDAY_API_KEY  = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY3NjAzMTQ0NywiYWFpIjoxMSwidWlkIjo4MDAxNzA3NSwiaWFkIjoiMjAyNi0wNi0yN1QwODowMDo0NC44MTlaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTEyMDIxNTQsInJnbiI6InVzZTEifQ.CfxMvONNSkGrjK1kejNSd5isFWyWwRUuQSFvzUvAy3A"; // החלף ב-API key החדש שלך
+
+function mondayQuery(query) {
+  return fetch("https://api.monday.com/v2", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": MONDAY_API_KEY,
+    },
+    body: JSON.stringify({query: query}),
+  }).then(function(r){ return r.json(); });
+}
+
+// Find the Monday item ID where the "name" column matches the given ID number
+function findMondayItem(idNumber) {
+  var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id column_values(ids: ["name"]) { text } } } } }';
+  return mondayQuery(q).then(function(data) {
+    var items = data.data.boards[0].items_page.items;
+    for (var i = 0; i < items.length; i++) {
+      var nameVal = items[i].column_values[0].text;
+      if (nameVal === idNumber) return items[i].id;
+    }
+    return null;
+  });
+}
+
+// Update Monday item columns
+function syncMonday(userId, status, dayLabel, shiftHours) {
+  findMondayItem(userId).then(function(itemId) {
+    if (!itemId) { console.warn("Monday: item not found for", userId); return; }
+
+    // status: "0"=לא קיים, "1"=קיים, "2"=נמחק
+    var colValues = {};
+    colValues["color_mm4qvjcs"] = {label: status === "0" ? "לא קיים" : status === "1" ? "קיים" : "נמחק"};
+    if (dayLabel  !== undefined) colValues["text_mm4qxbn0"] = dayLabel  || "";
+    if (shiftHours !== undefined) colValues["text_mm4qsdfw"] = shiftHours || "";
+
+    var colValStr = JSON.stringify(JSON.stringify(colValues));
+    var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + itemId + ', column_values: ' + colValStr + ') { id } }';
+    mondayQuery(mutation).then(function(res) {
+      if (res.errors) console.error("Monday sync error:", res.errors);
+    });
+  });
+}
+
 function dbLog(entry){
   supabase.from("activity_log").insert({
     type:entry.type,user_id:entry.userId,user_name:entry.userName,
@@ -339,28 +386,23 @@ export default function App() {
       var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
       var e={type:"register",userId:me.id,userName:me.name,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(me.id, "1", shift?(dayNames[shift.day]||("יום "+shift.day)):"", shift?shift.hours:"");
     });
   }
 
-  // -- Admin registers a day manager to a day --
-  // Admin registers day manager — direct insert, bypasses registration_open
   function handleAdminDmRegister(userId, day) {
     var dayConfig = dayConfs[day] || {maxDayMgr:2};
-    if ((dmOcc[day]||[]).length >= dayConfig.maxDayMgr) {
-      alert("היום מלא — אין מקום לאחראי יום נוסף."); return;
-    }
-    if (dmRegs[userId]) {
-      alert("המשתמש כבר רשום ליום אחר."); return;
-    }
+    if ((dmOcc[day]||[]).length >= dayConfig.maxDayMgr) { alert("היום מלא — אין מקום לאחראי יום נוסף."); return; }
+    if (dmRegs[userId]) { alert("המשתמש כבר רשום ליום אחר."); return; }
     supabase.from("day_manager_regs").insert({user_id:userId, day:day}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(userId, "1", dayNames[day]||("יום "+day), "אחראי יום");
     });
   }
 
-  // Admin registers user for shift — direct insert, bypasses registration_open
   function handleAdminRegister(userId,shiftId){
     var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
     if (regs[userId]) { alert("המשתמש כבר רשום למשמרת אחרת."); return; }
@@ -375,6 +417,7 @@ export default function App() {
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(userId, "1", shift?(dayNames[shift.day]||("יום "+shift.day)):"", shift?shift.hours:"");
     });
   }
 
@@ -385,6 +428,7 @@ export default function App() {
       setDmRegs(function(p){var n=Object.assign({},p);n[me.id]=day;return n;});
       var e={type:"register",userId:me.id,userName:me.name,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(me.id, "1", dayNames[day]||("יום "+day), "אחראי יום");
     });
   }
 
@@ -396,6 +440,7 @@ export default function App() {
       setRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:sid,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(uid, "0", "", "");
     });
   }
 
@@ -406,6 +451,7 @@ export default function App() {
       setDmRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(uid, "0", "", "");
     });
   }
 
@@ -415,6 +461,7 @@ export default function App() {
       setUsers(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"delete_user",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
+      syncMonday(uid, "2", "", "");
     });
   }
 
