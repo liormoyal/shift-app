@@ -291,23 +291,10 @@ function findMondayItem(idNumber) {
   });
 }
 
-function createMondayItem(idNumber) {
-  var mutation = 'mutation { create_item(board_id: ' + MONDAY_BOARD_ID + ', item_name: "' + idNumber + '", column_values: "{\\"color_mm4qvjcs\\": {\\"label\\": \\"חסר במאנדיי\\"}}") { id } }';
-  return mondayQuery(mutation).then(function(res) {
-    if (res.errors) { console.error("Monday create error:", res.errors); return null; }
-    return res.data.create_item.id;
-  });
-}
-
-// status: "1"=קיים, "2"=נמחק, null=אל תשנה סטטוס
-// dayLabel/shiftHours: "" = נקה, undefined = אל תשנה
 function syncMonday(userId, status, dayLabel, shiftHours) {
   findMondayItem(userId).then(function(itemId) {
     if (!itemId) {
-      // Create new item with "חסר במאנדיי" status
-      createMondayItem(userId).then(function(newId) {
-        if (newId) console.log("Monday: created new item for", userId);
-      });
+      alert("שים לב: המשתמש עם ת.ז. " + userId + " חסר במאנדיי.\nהפעולה בוצעה במערכת אך לא עודכנה במאנדיי.");
       return;
     }
     var colValues = {};
