@@ -260,7 +260,7 @@ async function loadAll() {
 
 // --- Monday.com sync --------------------------------------------------------
 var MONDAY_BOARD_ID = "18419606261";
-var MONDAY_API_KEY  = "REPLACE_WITH_NEW_API_KEY"; // החלף ב-API key החדש שלך
+var MONDAY_API_KEY  = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY3NjAzMTQ0NywiYWFpIjoxMSwidWlkIjo4MDAxNzA3NSwiaWFkIjoiMjAyNi0wNi0yN1QwODowMDo0NC44MTlaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTEyMDIxNTQsInJnbiI6InVzZTEifQ.CfxMvONNSkGrjK1kejNSd5isFWyWwRUuQSFvzUvAy3A"; // החלף ב-API key החדש שלך
 
 function mondayQuery(query) {
   return fetch("https://api.monday.com/v2", {
