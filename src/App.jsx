@@ -283,7 +283,6 @@ function findMondayItem(idNumber) {
           return items[i].id;
         }
       }
-      console.warn("Monday: no item found for ID", idNumber);
       return null;
     } catch(err) {
       console.error("Monday findMondayItem error:", err);
@@ -292,17 +291,32 @@ function findMondayItem(idNumber) {
   });
 }
 
-// Update Monday item columns
+function createMondayItem(idNumber) {
+  var mutation = 'mutation { create_item(board_id: ' + MONDAY_BOARD_ID + ', item_name: "' + idNumber + '", column_values: "{\\"color_mm4qvjcs\\": {\\"label\\": \\"חסר במאנדיי\\"}}") { id } }';
+  return mondayQuery(mutation).then(function(res) {
+    if (res.errors) { console.error("Monday create error:", res.errors); return null; }
+    return res.data.create_item.id;
+  });
+}
+
+// status: "1"=קיים, "2"=נמחק, null=אל תשנה סטטוס
+// dayLabel/shiftHours: "" = נקה, undefined = אל תשנה
 function syncMonday(userId, status, dayLabel, shiftHours) {
   findMondayItem(userId).then(function(itemId) {
-    if (!itemId) { console.warn("Monday: item not found for", userId); return; }
-
-    // status: "0"=לא קיים, "1"=קיים, "2"=נמחק
+    if (!itemId) {
+      // Create new item with "חסר במאנדיי" status
+      createMondayItem(userId).then(function(newId) {
+        if (newId) console.log("Monday: created new item for", userId);
+      });
+      return;
+    }
     var colValues = {};
-    colValues["color_mm4qvjcs"] = {label: status === "0" ? "לא קיים" : status === "1" ? "קיים" : "נמחק"};
-    if (dayLabel  !== undefined) colValues["text_mm4qxbn0"] = dayLabel  || "";
+    if (status !== null) {
+      var label = status === "1" ? "קיים" : status === "2" ? "נמחק" : "לא קיים";
+      colValues["color_mm4qvjcs"] = {label: label};
+    }
+    if (dayLabel   !== undefined) colValues["text_mm4qxbn0"] = dayLabel   || "";
     if (shiftHours !== undefined) colValues["text_mm4qsdfw"] = shiftHours || "";
-
     var colValStr = JSON.stringify(JSON.stringify(colValues));
     var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + itemId + ', column_values: ' + colValStr + ') { id } }';
     mondayQuery(mutation).then(function(res) {
@@ -446,7 +460,7 @@ export default function App() {
       setRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:sid,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
-      syncMonday(uid, "0", "", "");
+      syncMonday(uid, null, "", "");  // keep status, clear shift fields
     });
   }
 
@@ -457,7 +471,7 @@ export default function App() {
       setDmRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
-      syncMonday(uid, "0", "", "");
+      syncMonday(uid, null, "", "");  // keep status, clear shift fields
     });
   }
 
@@ -510,6 +524,8 @@ export default function App() {
           logType = "import_update";
         }
         logEntries.push({type:logType,user_id:id,user_name:u.name,actor_id:me.id,actor_name:me.name,actor_type:me.type});
+        // Sync new users to Monday as "קיים"
+        if (logType === "import_new") syncMonday(id, "1", "", "");
       });
       logEntries.forEach(function(e){ supabase.from("activity_log").insert(e); });
       setLog(function(prev){
