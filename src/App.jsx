@@ -828,10 +828,250 @@ function LoginScreen(props) {
 
 // ─── VOLUNTEER VIEW ───────────────────────────────────────────────────────────
 function VolView(props) {
-  var sf = useState("all"); var filterDay = sf[0]; var setFilterDay = sf[1];
   var sc = useState(null); var confirming = sc[0]; var setConfirming = sc[1];
   var sv = useState("register"); var view = sv[0]; var setView = sv[1];
   var isMgr = props.me.type === "manager";
+  var myShiftId = props.regs[props.me.id] || null;
+  var myShift = null;
+  for (var i = 0; i < props.shifts.length; i++) {
+    if (props.shifts[i].id === myShiftId) { myShift = props.shifts[i]; break; }
+  }
+
+  function getSlot(shift) {
+    var o = props.occ[shift.id] || {volunteers:[],managers:[]};
+    if (isMgr) return {used:o.managers.length, max:shift.maxManagers, ok:o.managers.length<shift.maxManagers};
+    return {used:o.volunteers.length, max:shift.maxVolunteers, ok:o.volunteers.length<shift.maxVolunteers};
+  }
+
+  return (
+    <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
+      <Hdr icon="🗓" title="רישום משמרות" name={props.me.name} sub={(isMgr?"אחראי משמרת":"מתנדב")+" - ת.ז. "+props.me.id} onLogout={props.onLogout} />
+      <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px"}}>
+
+        <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
+          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
+          <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
+        </div>
+
+        {view === "roster" && (
+          <RosterView shifts={props.shifts} occ={props.occ} users={props.users||{}} dayNames={props.dayNames} dmOcc={props.dmOcc||{}} dmRegs={props.dmRegs||{}} />
+        )}
+
+        {view === "register" && (
+          <div>
+            {/* Registered banner */}
+            {myShift && (
+              <div style={{background:"linear-gradient(135deg,#27AE60,#1E8449)",color:"#fff",borderRadius:14,padding:"20px 24px",marginBottom:24,boxShadow:"0 4px 20px rgba(39,174,96,.3)"}}>
+                <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>נרשם/ה למשמרת</div>
+                <div style={{fontSize:22,fontWeight:800}}>{props.dayNames[myShift.day]||("יום "+myShift.day)} — {myShift.icon} {myShift.name}</div>
+                <div style={{fontSize:14,opacity:.85,marginTop:3}}>{myShift.hours}</div>
+                {props.allowSelfRemove ? (
+                  <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    <button onClick={props.onSelfRemove} style={{padding:"9px 20px",borderRadius:9,border:"2px solid rgba(255,255,255,.7)",background:"rgba(255,255,255,.15)",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>ביטול רישום וחזרה לבחירה</button>
+                    <span style={{fontSize:11,opacity:.75}}>ניתן להירשם מחדש לאחר הביטול</span>
+                  </div>
+                ) : (
+                  <div style={{marginTop:12,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"8px 12px",fontSize:12}}>רוצה להחליף? יש לפנות למנהל.</div>
+                )}
+              </div>
+            )}
+
+            {/* Closed banner */}
+            {!props.regOpen && !myShift && (
+              <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
+                <div style={{fontSize:40,marginBottom:10}}>🔒</div>
+                <div style={{fontSize:20,fontWeight:900,marginBottom:6}}>ההרשמה למשמרות טרם נפתחה</div>
+                <div style={{fontSize:14,opacity:.75}}>ההרשמה תיפתח בקרוב על ידי הנהלת האירוע.</div>
+              </div>
+            )}
+
+            {/* Day-grouped shifts */}
+            {(props.regOpen || myShift) && DAYS.map(function(day) {
+              var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
+              if (!dayShifts.length) return null;
+              var dayMgrs = (props.dmOcc[day]||[]).length;
+              var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
+              return (
+                <div key={day} style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden"}}>
+                  {/* Day header */}
+                  <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
+                    <span style={{fontSize:11,opacity:.7}}>אחראי יום: {dayMgrs}/{maxDm}</span>
+                  </div>
+                  {/* Shifts grid */}
+                  <div style={{padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:10}}>
+                    {dayShifts.map(function(shift) {
+                      var slot = getSlot(shift);
+                      var isMe = shift.id === myShiftId;
+                      var isPending = confirming === shift.id;
+                      return (
+                        <div key={shift.id} style={{borderRadius:12,padding:14,border:"2px solid "+(isMe?C.green:"#EEF2F7"),background:isMe?"#F0FFF4":"#F8FAFC",opacity:(!slot.ok&&!isMe)?0.55:1}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                            <div>
+                              <span style={{fontSize:18}}>{shift.icon}</span>
+                              <div style={{fontSize:14,fontWeight:800,color:C.navy,marginTop:2}}>{shift.name}</div>
+                              <div style={{fontSize:11,color:C.muted}}>{shift.hours}</div>
+                            </div>
+                            {isMe && <span style={{background:C.green,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
+                          </div>
+                          <div style={{marginBottom:10}}>
+                            <Bar val={slot.used} max={slot.max} />
+                          </div>
+                          {!myShiftId && (
+                            isPending ? (
+                              <div>
+                                <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"8px 10px",marginBottom:7,textAlign:"center"}}>
+                                  <div style={{fontSize:12,fontWeight:900,color:C.red}}>שים/י לב!</div>
+                                  <div style={{fontSize:10,fontWeight:800,color:C.red}}>לאחר הרישום לא ניתן לשנות.</div>
+                                </div>
+                                <div style={{display:"flex",gap:5}}>
+                                  <button onClick={function(){props.onRegister(shift.id);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"none",background:C.green,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
+                                  <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button onClick={function(){if(slot.ok)setConfirming(shift.id);}} disabled={!slot.ok}
+                                style={{width:"100%",padding:"7px 0",borderRadius:8,border:"none",background:slot.ok?"linear-gradient(135deg,#E67E22,#F39C12)":"#E2E8F0",color:slot.ok?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:slot.ok?"pointer":"not-allowed"}}>
+                                {slot.ok?"הירשם/י":"מלאה"}
+                              </button>
+                            )
+                          )}
+                          {myShiftId && !isMe && <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>{slot.ok?(slot.max-slot.used)+" פנויים":"מלאה"}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DayMgrView(props) {
+  var sc = useState(null); var confirming = sc[0]; var setConfirming = sc[1];
+  var sv = useState("register"); var view = sv[0]; var setView = sv[1];
+  var myDay = props.dmRegs[props.me.id] || null;
+
+  return (
+    <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
+      <Hdr icon="📋" title="רישום משמרות" name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
+      <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px"}}>
+
+        <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
+          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
+          <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
+        </div>
+
+        {view === "roster" && (
+          <RosterView shifts={props.shifts||[]} occ={props.occ||{}} users={props.users||{}} dayNames={props.dayNames} dmOcc={props.dmOcc||{}} dmRegs={props.dmRegs||{}} />
+        )}
+
+        {view === "register" && (
+          <div>
+            {myDay && (
+              <div style={{background:"linear-gradient(135deg,#0D9488,#0F766E)",color:"#fff",borderRadius:14,padding:"20px 24px",marginBottom:24}}>
+                <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>רשום/ה כאחראי/ת יום</div>
+                <div style={{fontSize:22,fontWeight:800}}>📋 {props.dayNames[myDay]||("יום "+myDay)}</div>
+                {props.allowSelfRemove ? (
+                  <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    <button onClick={props.onSelfRemove} style={{padding:"9px 20px",borderRadius:9,border:"2px solid rgba(255,255,255,.7)",background:"rgba(255,255,255,.15)",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>ביטול רישום וחזרה לבחירה</button>
+                  </div>
+                ) : (
+                  <div style={{marginTop:10,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"7px 11px",fontSize:12}}>רוצה להחליף יום? יש לפנות למנהל.</div>
+                )}
+              </div>
+            )}
+
+            {!props.regOpen && !myDay && (
+              <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
+                <div style={{fontSize:40,marginBottom:10}}>🔒</div>
+                <div style={{fontSize:20,fontWeight:900}}>ההרשמה טרם נפתחה</div>
+              </div>
+            )}
+
+            {/* Day cards — each with shifts + day manager slot */}
+            {(props.regOpen || myDay) && DAYS.map(function(day) {
+              var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
+              var occupied  = (props.dmOcc[day]||[]).length;
+              var maxSlots  = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
+              var dmOk      = occupied < maxSlots;
+              var isMyDay   = myDay === day;
+              var isPending = confirming === day;
+              return (
+                <div key={day} style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden",border:"2.5px solid "+(isMyDay?C.teal:"transparent")}}>
+                  {/* Day header */}
+                  <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
+                    <span style={{fontSize:11,opacity:.75}}>{dayShifts.length} משמרות</span>
+                  </div>
+
+                  {/* Day manager slot */}
+                  <div style={{padding:"12px 16px",borderBottom:"1.5px solid #EEF2F7",background:"#F0FDF9",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:16}}>📋</span>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:C.teal}}>אחראי יום</div>
+                        <div style={{fontSize:11,color:C.muted}}>{occupied}/{maxSlots} נרשמו</div>
+                      </div>
+                      {isMyDay && <span style={{background:C.teal,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:80,maxWidth:160}}>
+                      <div style={{height:5,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
+                        <div style={{height:"100%",borderRadius:3,width:(Math.min(1,occupied/maxSlots)*100)+"%",background:occupied>=maxSlots?C.red:C.teal}} />
+                      </div>
+                    </div>
+                    {!myDay && (
+                      isPending ? (
+                        <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:170}}>
+                          <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 10px",textAlign:"center",fontSize:11,fontWeight:700,color:C.red}}>לא ניתן לשנות לאחר הרישום!</div>
+                          <div style={{display:"flex",gap:5}}>
+                            <button onClick={function(){props.onRegister(day);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"none",background:C.teal,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
+                            <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={function(){if(dmOk)setConfirming(day);}} disabled={!dmOk}
+                          style={{padding:"7px 16px",borderRadius:8,border:"none",background:dmOk?"linear-gradient(135deg,#0D9488,#0F766E)":"#E2E8F0",color:dmOk?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:dmOk?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+                          {dmOk?"הירשם/י כאחראי/ת יום":"מלא"}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  {/* Shifts info */}
+                  {dayShifts.length > 0 && (
+                    <div style={{padding:"12px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
+                      {dayShifts.map(function(shift) {
+                        var o = props.occ[shift.id]||{volunteers:[],managers:[]};
+                        return (
+                          <div key={shift.id} style={{borderRadius:9,padding:"10px 12px",background:"#F8FAFC",border:"1px solid #EEF2F7"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                              <span style={{fontSize:14}}>{shift.icon}</span>
+                              <div>
+                                <div style={{fontSize:12,fontWeight:700,color:C.navy}}>{shift.name}</div>
+                                <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
+                              </div>
+                            </div>
+                            <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
   var myShiftId = props.regs[props.me.id] || null;
   var myShift = null;
   for (var i = 0; i < props.shifts.length; i++) {
@@ -970,102 +1210,6 @@ function VolView(props) {
 }
 
 // ─── DAY MANAGER VIEW ─────────────────────────────────────────────────────────
-function DayMgrView(props) {
-  var sc = useState(null); var confirming = sc[0]; var setConfirming = sc[1];
-  var sv = useState("register"); var view = sv[0]; var setView = sv[1];
-  var myDay = props.dmRegs[props.me.id] || null;
-
-  return (
-    <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
-      <Hdr icon="📋" title="רישום משמרות" name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
-      <div style={{maxWidth:700,margin:"0 auto",padding:"24px 16px"}}>
-        <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
-          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
-          <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
-        </div>
-        {view === "roster" && (
-          <RosterView shifts={props.shifts||[]} occ={props.occ||{}} users={props.users||{}} dayNames={props.dayNames} dmOcc={props.dmOcc||{}} dmRegs={props.dmRegs||{}} />
-        )}
-        {view === "register" && myDay && (
-          <div style={{background:"linear-gradient(135deg,#0D9488,#0F766E)",color:"#fff",borderRadius:14,padding:"20px 24px",marginBottom:24}}>
-            <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>רשום/ה כאחראי/ת יום</div>
-            <div style={{fontSize:22,fontWeight:800}}>📋 {props.dayNames[myDay]||("יום "+myDay)}</div>
-            {props.allowSelfRemove ? (
-              <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                <button onClick={props.onSelfRemove} style={{padding:"9px 20px",borderRadius:9,border:"2px solid rgba(255,255,255,.7)",background:"rgba(255,255,255,.15)",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>
-                  ביטול רישום וחזרה לבחירה
-                </button>
-                <span style={{fontSize:11,opacity:.75}}>ניתן לבחור יום אחר לאחר הביטול</span>
-              </div>
-            ) : (
-              <div style={{marginTop:10,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"7px 11px",fontSize:12}}>רוצה להחליף יום? יש לפנות למנהל.</div>
-            )}
-          </div>
-        )}
-        {view === "register" && !props.regOpen && !myDay && (
-          <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
-            <div style={{fontSize:40,marginBottom:10}}>🔒</div>
-            <div style={{fontSize:20,fontWeight:900}}>ההרשמה טרם נפתחה</div>
-          </div>
-        )}
-        {view === "register" && !myDay && props.regOpen && <h2 style={{color:C.navy,fontSize:20,fontWeight:800,margin:"0 0 16px"}}>בחר/י יום</h2>}
-        {view === "register" && (props.regOpen || myDay) && (
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {DAYS.map(function(day) {
-              var occupied = (props.dmOcc[day]||[]).length;
-              var maxSlots = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
-              var ok = occupied < maxSlots;
-              var isMe = myDay === day;
-              var pct = maxSlots > 0 ? Math.min(1, occupied / maxSlots) : 0;
-              var isPending = confirming === day;
-              return (
-                <div key={day} style={{background:C.card,borderRadius:12,padding:"16px 20px",boxShadow:"0 2px 8px rgba(0,0,0,.08)",border:"2.5px solid "+(isMe?C.teal:"transparent"),opacity:(!ok&&!isMe)?0.55:1}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{fontSize:20}}>📋</span>
-                      <div>
-                        <div style={{fontSize:15,fontWeight:800,color:C.navy}}>{props.dayNames[day]||("יום "+day)}</div>
-                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{occupied}/{maxSlots} אחראי יום</div>
-                      </div>
-                      {isMe && <span style={{background:C.teal,color:"#fff",borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:800}}>שלי</span>}
-                    </div>
-                    <div style={{flex:1,minWidth:100}}>
-                      <div style={{height:6,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
-                        <div style={{height:"100%",borderRadius:3,width:(pct*100)+"%",background:pct>=1?C.red:pct>=0.5?C.amber:C.teal}} />
-                      </div>
-                    </div>
-                    {!myDay && (
-                      isPending ? (
-                        <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:160}}>
-                          <div style={{background:"#FEF2F2",border:"2px solid "+C.red,borderRadius:7,padding:"7px 10px",textAlign:"center"}}>
-                            <div style={{fontSize:12,fontWeight:900,color:C.red}}>לא ניתן לשנות לאחר הרישום!</div>
-                            <div style={{fontSize:10,color:"#7F1D1D",fontWeight:700}}>שינויים רק דרך אחראי HR</div>
-                          </div>
-                          <div style={{display:"flex",gap:5}}>
-                            <button onClick={function(){props.onRegister(day);setConfirming(null);}} style={{flex:1,padding:"7px 0",borderRadius:7,border:"none",background:C.teal,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>אישור</button>
-                            <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"7px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:12,cursor:"pointer"}}>ביטול</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button onClick={function(){if(ok)setConfirming(day);}} disabled={!ok}
-                          style={{padding:"8px 18px",borderRadius:8,border:"none",background:ok?"linear-gradient(135deg,#0D9488,#0F766E)":"#E2E8F0",color:ok?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:ok?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-                          {ok?"הירשם/י":"מקסימום"}
-                        </button>
-                      )
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── ADMIN PANEL ─────────────────────────────────────────────────────────────
-// ─── ROSTER VIEW (names only, visible to all users) ───────────────────────────
 function RosterView(props) {
   var sf = useState("all"); var filterDay = sf[0]; var setFilterDay = sf[1];
   var visibleDays = filterDay === "all" ? DAYS : [Number(filterDay)];
