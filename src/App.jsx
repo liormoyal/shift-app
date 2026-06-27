@@ -898,21 +898,21 @@ function VolView(props) {
                     <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
                     <span style={{fontSize:11,opacity:.7}}>אחראי יום: {dayMgrs}/{maxDm}</span>
                   </div>
-                  {/* Shifts grid */}
-                  <div style={{padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:10}}>
-                    {dayShifts.map(function(shift) {
+                  {/* Shifts — horizontal columns like DayView */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat("+dayShifts.length+",1fr)",overflowX:"auto"}}>
+                    {dayShifts.map(function(shift, idx) {
                       var slot = getSlot(shift);
                       var isMe = shift.id === myShiftId;
                       var isPending = confirming === shift.id;
                       return (
-                        <div key={shift.id} style={{borderRadius:12,padding:14,border:"2px solid "+(isMe?C.green:"#EEF2F7"),background:isMe?"#F0FFF4":"#F8FAFC",opacity:(!slot.ok&&!isMe)?0.55:1}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                            <div>
-                              <span style={{fontSize:18}}>{shift.icon}</span>
-                              <div style={{fontSize:14,fontWeight:800,color:C.navy,marginTop:2}}>{shift.name}</div>
-                              <div style={{fontSize:11,color:C.muted}}>{shift.hours}</div>
+                        <div key={shift.id} style={{padding:"14px 16px",borderLeft:idx>0?"1px solid #EEF2F7":"none",background:isMe?"#F0FFF4":"#fff",opacity:(!slot.ok&&!isMe)?0.6:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
+                            <span style={{fontSize:18}}>{shift.icon}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{shift.name}</div>
+                              <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
                             </div>
-                            {isMe && <span style={{background:C.green,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
+                            {isMe && <span style={{background:C.green,color:"#fff",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>שלי</span>}
                           </div>
                           <div style={{marginBottom:10}}>
                             <Bar val={slot.used} max={slot.max} />
@@ -920,18 +920,18 @@ function VolView(props) {
                           {!myShiftId && (
                             isPending ? (
                               <div>
-                                <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"8px 10px",marginBottom:7,textAlign:"center"}}>
-                                  <div style={{fontSize:12,fontWeight:900,color:C.red}}>שים/י לב!</div>
-                                  <div style={{fontSize:10,fontWeight:800,color:C.red}}>לאחר הרישום לא ניתן לשנות.</div>
+                                <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 8px",marginBottom:6,textAlign:"center"}}>
+                                  <div style={{fontSize:11,fontWeight:900,color:C.red}}>שים/י לב!</div>
+                                  <div style={{fontSize:9,fontWeight:800,color:C.red}}>לא ניתן לשנות לאחר הרישום.</div>
                                 </div>
-                                <div style={{display:"flex",gap:5}}>
-                                  <button onClick={function(){props.onRegister(shift.id);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"none",background:C.green,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
-                                  <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
+                                <div style={{display:"flex",gap:4}}>
+                                  <button onClick={function(){props.onRegister(shift.id);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",background:C.green,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
+                                  <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
                                 </div>
                               </div>
                             ) : (
                               <button onClick={function(){if(slot.ok)setConfirming(shift.id);}} disabled={!slot.ok}
-                                style={{width:"100%",padding:"7px 0",borderRadius:8,border:"none",background:slot.ok?"linear-gradient(135deg,#E67E22,#F39C12)":"#E2E8F0",color:slot.ok?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:slot.ok?"pointer":"not-allowed"}}>
+                                style={{width:"100%",padding:"7px 0",borderRadius:7,border:"none",background:slot.ok?"linear-gradient(135deg,#E67E22,#F39C12)":"#E2E8F0",color:slot.ok?"#fff":C.muted,fontSize:11,fontWeight:800,cursor:slot.ok?"pointer":"not-allowed"}}>
                                 {slot.ok?"הירשם/י":"מלאה"}
                               </button>
                             )
