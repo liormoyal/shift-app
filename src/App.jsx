@@ -601,9 +601,12 @@ export default function App() {
 function Hdr(props) {
   return (
     <header dir="rtl" style={{background:props.bg||C.navy,color:"#fff",padding:"0 20px",height:60,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:99,boxShadow:"0 2px 10px rgba(0,0,0,.3)"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:20}}>{props.icon}</span>
-        <div>{props.title}</div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <img src="/logo.png" alt="logo" style={{width:36,height:36,objectFit:"contain",borderRadius:4}} />
+        <div>
+          <div style={{fontSize:11,color:"#C4B5FD",fontWeight:700,lineHeight:1}}>מידברן 2026 - מחלקת תנועה</div>
+          <div style={{fontWeight:800,fontSize:15,lineHeight:1.3}}>{props.title}</div>
+        </div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
         <div style={{textAlign:"left"}}>
@@ -671,30 +674,9 @@ function LoginScreen(props) {
     <div dir="rtl" style={{minHeight:"100vh",background:"url('/login-bg.jpg') center center / cover no-repeat",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
       <div style={{background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",borderRadius:20,padding:"36px 32px",width:"100%",maxWidth:390,boxShadow:"0 30px 80px rgba(0,0,0,.5)"}}>
         <div style={{textAlign:"center",marginBottom:26}}>
-          <div style={{width:64,height:64,background:"linear-gradient(135deg,#E67E22,#F39C12)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 12px",boxShadow:"0 6px 20px rgba(230,126,34,.4)"}}>🗓</div>
-<div style={{marginBottom:4}}>
-  <div
-    style={{
-      color: C.amber,
-      fontSize: 14,
-      fontWeight: 700,
-      marginBottom: 4
-    }}
-  >
-    מידברן 2026 - מחלקת תנועה
-  </div>
-
-  <h2
-    style={{
-      color: C.navy,
-      margin: 0,
-      fontSize: 24,
-      fontWeight: 800
-    }}
-  >
-    רישום משמרות
-  </h2>
-</div>
+          <img src="/logo.png" alt="logo" style={{width:90,height:90,objectFit:"contain",margin:"0 auto 12px",display:"block"}} />
+          <div style={{color:"#7C3AED",fontSize:16,fontWeight:800,marginBottom:4}}>מידברן 2026 - מחלקת תנועה</div>
+          <h2 style={{color:C.navy,margin:"0 0 4px",fontSize:24,fontWeight:800}}>רישום משמרות</h2>
           <p style={{color:C.muted,margin:0,fontSize:13}}>{step==="id"?"הזן/י מספר תעודת זהות":"הזן/י סיסמה להמשך"}</p>
         </div>
 
@@ -763,16 +745,7 @@ function VolView(props) {
 
   return (
     <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
-      <Hdr icon="🗓" title={
-    <div>
-      <div style={{fontSize:12,fontWeight:600,opacity:0.9}}>
-        מידברן 2026 - מחלקת תנועה
-      </div>
-      <div style={{fontSize:17,fontWeight:800}}>
-        רישום משמרות
-      </div>
-    </div>
-  } name={props.me.name} sub={(isMgr?"אחראי משמרת":"מתנדב")+" - ת.ז. "+props.me.id} onLogout={props.onLogout} />
+      <Hdr icon="🗓" title="רישום משמרות" name={props.me.name} sub={(isMgr?"אחראי משמרת":"מתנדב")+" - ת.ז. "+props.me.id} onLogout={props.onLogout} />
       <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px"}}>
 
         {/* View toggle */}
@@ -901,16 +874,7 @@ function DayMgrView(props) {
 
   return (
     <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
-      <Hdr icon="📋" title={
-    <div>
-      <div style={{fontSize:12,fontWeight:600,opacity:0.9}}>
-        מידברן 2026 - מחלקת תנועה
-      </div>
-      <div style={{fontSize:17,fontWeight:800}}>
-        רישום משמרות
-      </div>
-    </div>
-  } name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
+      <Hdr icon="📋" title="רישום משמרות" name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
       <div style={{maxWidth:700,margin:"0 auto",padding:"24px 16px"}}>
         <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
           <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
@@ -1677,7 +1641,7 @@ function AllUsers(props) {
     if (ft !== "all" && u.type !== ft) continue;
     if (search) {
       var q = search.toLowerCase();
-      if ((u.name||"").toLowerCase().indexOf(q)<0 && id.indexOf(q)<0 && (u.phone||"").indexOf(q)<0) continue;
+      if ((u.name||"").toLowerCase().indexOf(q)<0 && id.indexOf(q)<0 && (u.phone||"").indexOf(q)<0 && (u.email||"").toLowerCase().indexOf(q)<0 && (u.hr||"").toLowerCase().indexOf(q)<0) continue;
     }
     var shiftId = props.regs[id] || null;
     var shift = null;
