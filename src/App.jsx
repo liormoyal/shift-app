@@ -597,6 +597,65 @@ export default function App() {
     });
   }
 
+  // Broadcast all users to Monday
+  function handleBroadcastToMonday(onResult) {
+    // Fetch all Monday items once
+    var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id name } } } }';
+    mondayQuery(q).then(function(data) {
+      var mondayItems = {};
+      try {
+        var items = data.data.boards[0].items_page.items;
+        for (var i = 0; i < items.length; i++) {
+          mondayItems[(items[i].name||"").trim()] = items[i].id;
+        }
+      } catch(err) {
+        alert("שגיאה בטעינת מאנדיי: " + err.message); return;
+      }
+
+      var missing = [];
+      var ukeys = Object.keys(users);
+      for (var j = 0; j < ukeys.length; j++) {
+        var uid = ukeys[j];
+        var u = users[uid];
+        if (u.type === "admin" || u.type === "superadmin") continue;
+
+        var itemId = mondayItems[uid];
+        if (!itemId) {
+          missing.push({id:uid, name:u.name, type:u.type});
+          continue;
+        }
+
+        // Build column values
+        var shiftId = regs[uid] || null;
+        var shift = null;
+        if (shiftId) {
+          for (var k = 0; k < shifts.length; k++) {
+            if (shifts[k].id === shiftId) { shift = shifts[k]; break; }
+          }
+        }
+        var dayNum = dmRegs[uid] || null;
+        var colValues = {};
+        colValues["color_mm4qvjcs"] = {label: "קיים"};
+        if (shift) {
+          colValues["text_mm4qxbn0"] = dayNames[shift.day] || ("יום " + shift.day);
+          colValues["text_mm4qsdfw"] = shift.hours;
+        } else if (dayNum) {
+          colValues["text_mm4qxbn0"] = dayNames[dayNum] || ("יום " + dayNum);
+          colValues["text_mm4qsdfw"] = "אחראי יום";
+        } else {
+          colValues["text_mm4qxbn0"] = "";
+          colValues["text_mm4qsdfw"] = "";
+        }
+
+        var colValStr = JSON.stringify(JSON.stringify(colValues));
+        var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + itemId + ', column_values: ' + colValStr + ') { id } }';
+        mondayQuery(mutation);
+      }
+
+      onResult(missing);
+    });
+  }
+
   if(loading){
     return (
       <div dir="rtl" style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif"}}>
@@ -634,6 +693,7 @@ export default function App() {
       dayNames={dayNames} dayConfigs={dayConfs} log={log}
       isSup={isSup} regOpen={regOpen} allowSelfRemove={allowSelfRemove}
       onToggleReg={handleToggleReg} onToggleSelfRemove={handleToggleSelfRemove}
+      onBroadcastToMonday={handleBroadcastToMonday}
       onRemove={handleRemove} onDmRemove={handleDmRemove}
       onDeleteUser={handleDeleteUser} onImport={handleImport}
       onAdminRegister={handleAdminRegister}
@@ -1246,7 +1306,7 @@ function AdminPanel(props) {
         {tab === "unregistered" && <Unreg      users={props.users} regs={props.regs} dmRegs={props.dmRegs} />}
         {tab === "log"          && <LogView    log={props.log} dayNames={props.dayNames} />}
         {tab === "import"       && props.isSup && <ImportView users={props.users} regs={props.regs} dmRegs={props.dmRegs} shifts={props.shifts} dayNames={props.dayNames} onImport={props.onImport} />}
-        {tab === "config"       && props.isSup && <ConfigView shiftMap={props.shiftMap} dayNames={props.dayNames} dayConfigs={props.dayConfigs} occ={props.occ} dmOcc={props.dmOcc} regs={props.regs} onUpdateShift={props.onUpdateShift} onAddShift={props.onAddShift} onRemoveShift={props.onRemoveShift} onUpdateDayName={props.onUpdateDayName} onUpdateDayConfig={props.onUpdateDayConfig} allowSelfRemove={props.allowSelfRemove} onToggleSelfRemove={props.onToggleSelfRemove} />}
+        {tab === "config"       && props.isSup && <ConfigView shiftMap={props.shiftMap} dayNames={props.dayNames} dayConfigs={props.dayConfigs} occ={props.occ} dmOcc={props.dmOcc} regs={props.regs} onUpdateShift={props.onUpdateShift} onAddShift={props.onAddShift} onRemoveShift={props.onRemoveShift} onUpdateDayName={props.onUpdateDayName} onUpdateDayConfig={props.onUpdateDayConfig} allowSelfRemove={props.allowSelfRemove} onToggleSelfRemove={props.onToggleSelfRemove} onBroadcastToMonday={props.onBroadcastToMonday} />}
       </div>
     </div>
   );
@@ -1993,12 +2053,23 @@ function LogView(props) {
 function ConfigView(props) {
   var si = useState(null); var iconPicker = si[0]; var setIconPicker = si[1];
   var sc = useState(null); var confirmDel = sc[0]; var setConfirmDel = sc[1];
+  var sb = useState(false); var broadcasting = sb[0]; var setBroadcasting = sb[1];
+  var sm = useState(null); var missingUsers = sm[0]; var setMissingUsers = sm[1];
 
   function regCount(shiftId) {
     var keys = Object.keys(props.regs);
     var cnt = 0;
     for(var i=0;i<keys.length;i++) if(props.regs[keys[i]]===shiftId) cnt++;
     return cnt;
+  }
+
+  function handleBroadcast() {
+    setBroadcasting(true);
+    setMissingUsers(null);
+    props.onBroadcastToMonday(function(missing) {
+      setBroadcasting(false);
+      setMissingUsers(missing);
+    });
   }
 
   return (
@@ -2008,7 +2079,50 @@ function ConfigView(props) {
         <p style={{color:C.muted,margin:0,fontSize:12}}>ערוך שם יום, אחראי יום, שם/שעות/אייקון/קיבולת לכל משמרת. הוסף או מחק משמרות.</p>
       </div>
 
-      {/* Self-remove toggle */}
+      {/* Monday broadcast */}
+      <div style={{background:C.card,borderRadius:14,padding:"16px 22px",marginBottom:16,boxShadow:"0 2px 8px rgba(0,0,0,.08)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:C.navy,marginBottom:3}}>שידור למאנדיי</div>
+            <div style={{fontSize:12,color:C.muted}}>מעדכן את כל המשתמשים במאנדיי — סטטוס, יום ושעת משמרת.</div>
+          </div>
+          <button onClick={handleBroadcast} disabled={broadcasting}
+            style={{padding:"10px 22px",borderRadius:10,border:"none",cursor:broadcasting?"not-allowed":"pointer",fontSize:14,fontWeight:800,background:broadcasting?"#E2E8F0":"linear-gradient(135deg,#7C3AED,#6D28D9)",color:broadcasting?C.muted:"#fff",minWidth:140}}>
+            {broadcasting?"שידור...":"📡 שידור למאנדיי"}
+          </button>
+        </div>
+        {missingUsers !== null && (
+          <div style={{marginTop:14}}>
+            {missingUsers.length === 0 ? (
+              <div style={{background:"#D5F5E3",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.green}}>
+                השידור הושלם בהצלחה — כל המשתמשים עודכנו במאנדיי
+              </div>
+            ) : (
+              <div>
+                <div style={{background:"#FEF2F2",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.red,marginBottom:8}}>
+                  {missingUsers.length} משתמשים חסרים במאנדיי:
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {missingUsers.map(function(u){
+                    var tm = TYPE_INFO[u.type]||{label:u.type,bg:"#F1F5F9",col:C.muted};
+                    return (
+                      <div key={u.id} style={{background:"#FEF2F2",borderRadius:8,padding:"9px 14px",display:"flex",alignItems:"center",gap:10,border:"1px solid #FED7D7"}}>
+                        <div style={{width:32,height:32,borderRadius:"50%",background:tm.bg,color:tm.col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(u.name||"?").charAt(0)}</div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:13,color:C.text}}>{u.name}</div>
+                          <div style={{fontSize:11,color:C.muted,fontFamily:"monospace"}}>ת.ז. {u.id} · {tm.label}</div>
+                        </div>
+                        <span style={{marginRight:"auto",fontSize:11,fontWeight:700,color:C.red}}>חסר במאנדיי</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div style={{background:C.card,borderRadius:14,padding:"16px 22px",marginBottom:20,boxShadow:"0 2px 8px rgba(0,0,0,.08)",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
         <div>
           <div style={{fontSize:15,fontWeight:800,color:C.navy,marginBottom:3}}>אפשרות ביטול עצמי</div>
