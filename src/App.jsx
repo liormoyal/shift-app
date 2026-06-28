@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.0";
+var APP_VERSION = "1.0.1";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -151,6 +151,16 @@ function doExportLog(log, dayNames) {
   XLSX.writeFile(wb, "לוג_פעילות.xlsx");
 }
 
+function fmtPhone(raw) {
+  if (raw === null || raw === undefined) return "";
+  var s = String(raw).trim();
+  if (/^5\d+$/.test(s)) {            // Israeli mobile that lost its leading 0 in Excel
+    s = "0" + s;                     // 548166099 -> 0548166099
+    return s.slice(0,3) + "-" + s.slice(3);  // -> 054-8166099
+  }
+  return s;
+}
+
 function parseImport(file, onDone, onError) {
   var reader = new FileReader();
   reader.onload = function(e) {
@@ -183,7 +193,7 @@ function parseImport(file, onDone, onError) {
         var id   = col(row);
         var type = TYPE_MAP[(colK(row,"type") || colK(row,"סוג")).toLowerCase()] || "";
         var name = colK(row,"name") || colK(row,"שם");
-        var phone= colK(row,"phone") || colK(row,"טלפון");
+        var phone= fmtPhone(colK(row,"phone") || colK(row,"טלפון"));
         var email= colK(row,"email") || colK(row,"דוא\"ל") || colK(row,"EMAIL");
         var pass = colK(row,"password") || colK(row,"סיסמה");
         var hr   = colK(row,"hr") || colK(row,"HR") || colK(row,"הערות HR") || colK(row,"הערות");
