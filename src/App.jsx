@@ -707,6 +707,7 @@ export default function App() {
       me={me} shifts={shifts} regs={regs} occ={occ}
       dayNames={dayNames} regOpen={regOpen} allowSelfRemove={allowSelfRemove}
       users={users} dmOcc={dmOcc} dmRegs={dmRegs}
+      dayConfigs={dayConfs}
       onRegister={handleRegister}
       onSelfRemove={function(){handleRemove(me.id);}}
       onLogout={function(){setMe(null);setLoginErr("");}}
