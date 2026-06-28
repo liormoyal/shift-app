@@ -761,6 +761,60 @@ function Bar(props) {
   );
 }
 
+// ─── Shared day-board building blocks ────────────────────────────────────────
+// All day-grouped screens (volunteer/manager registration, day-manager
+// registration, the roster, and the admin "by day" view) share this skeleton:
+// one DayCard per day (navy header + optional banner + a column grid), and one
+// ShiftCol per shift inside it. Only the body of each column differs per screen.
+function dayBoardGrid() {
+  return {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:1,background:"#EEF2F7"};
+}
+
+function DayCard(props) {
+  return (
+    <div style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden",border:"2.5px solid "+(props.accent||"transparent")}}>
+      <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:16,fontWeight:900}}>{props.title}</span>
+          {props.meta ? <span style={{fontSize:12,opacity:.75}}>{props.meta}</span> : null}
+        </div>
+        {props.action || null}
+      </div>
+      {props.banner || null}
+      <div style={dayBoardGrid()}>
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
+function ShiftCol(props) {
+  var s = props.shift;
+  return (
+    <div style={{padding:"14px 16px",background:props.highlight||"#fff",opacity:props.faded?0.6:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
+        <span style={{fontSize:18}}>{s.icon}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{s.name}</div>
+          <div style={{fontSize:10,color:C.muted}}>{s.hours}</div>
+        </div>
+        {props.badge || null}
+      </div>
+      {props.children}
+    </div>
+  );
+}
+
+function ClosedBanner(props) {
+  return (
+    <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
+      <div style={{fontSize:40,marginBottom:10}}>🔒</div>
+      <div style={{fontSize:20,fontWeight:900,marginBottom:6}}>ההרשמה למשמרות טרם נפתחה</div>
+      <div style={{fontSize:14,opacity:.75}}>{props.sub||"ההרשמה תיפתח בקרוב על ידי הנהלת האירוע."}</div>
+    </div>
+  );
+}
+
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
 function LoginScreen(props) {
   var si = useState(""); var idVal = si[0]; var setIdVal = si[1];
@@ -844,13 +898,15 @@ function VolView(props) {
     return {used:o.volunteers.length, max:shift.maxVolunteers, ok:o.volunteers.length<shift.maxVolunteers};
   }
 
+  var regLabel = isMgr ? "משמרות" : "הרשמה";
+
   return (
     <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
       <Hdr icon="🗓" title="רישום משמרות" name={props.me.name} sub={(isMgr?"אחראי משמרת":"מתנדב")+" - ת.ז. "+props.me.id} onLogout={props.onLogout} />
-      <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px"}}>
+      <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 16px"}}>
 
         <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
-          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
+          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>{regLabel}</button>
           <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
         </div>
 
@@ -860,7 +916,6 @@ function VolView(props) {
 
         {view === "register" && (
           <div>
-            {/* Registered banner */}
             {myShift && (
               <div style={{background:"linear-gradient(135deg,#27AE60,#1E8449)",color:"#fff",borderRadius:14,padding:"20px 24px",marginBottom:24,boxShadow:"0 4px 20px rgba(39,174,96,.3)"}}>
                 <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>נרשם/ה למשמרת</div>
@@ -877,72 +932,45 @@ function VolView(props) {
               </div>
             )}
 
-            {/* Closed banner */}
-            {!props.regOpen && !myShift && (
-              <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
-                <div style={{fontSize:40,marginBottom:10}}>🔒</div>
-                <div style={{fontSize:20,fontWeight:900,marginBottom:6}}>ההרשמה למשמרות טרם נפתחה</div>
-                <div style={{fontSize:14,opacity:.75}}>ההרשמה תיפתח בקרוב על ידי הנהלת האירוע.</div>
-              </div>
-            )}
+            {!props.regOpen && !myShift && <ClosedBanner />}
 
-            {/* Day-grouped shifts */}
             {(props.regOpen || myShift) && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               if (!dayShifts.length) return null;
               var dayMgrs = (props.dmOcc[day]||[]).length;
               var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
               return (
-                <div key={day} style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden"}}>
-                  {/* Day header */}
-                  <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
-                    <span style={{fontSize:11,opacity:.7}}>אחראי יום: {dayMgrs}/{maxDm}</span>
-                  </div>
-                  {/* Shifts — horizontal columns like DayView */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat("+dayShifts.length+",1fr)",overflowX:"auto"}}>
-                    {dayShifts.map(function(shift, idx) {
-                      var slot = getSlot(shift);
-                      var isMe = shift.id === myShiftId;
-                      var isPending = confirming === shift.id;
-                      return (
-                        <div key={shift.id} style={{padding:"14px 16px",borderLeft:idx>0?"1px solid #EEF2F7":"none",background:isMe?"#F0FFF4":"#fff",opacity:(!slot.ok&&!isMe)?0.6:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
-                            <span style={{fontSize:18}}>{shift.icon}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{shift.name}</div>
-                              <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
+                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={"אחראי יום: "+dayMgrs+"/"+maxDm}>
+                  {dayShifts.map(function(shift, idx) {
+                    var slot = getSlot(shift);
+                    var isMe = shift.id === myShiftId;
+                    var isPending = confirming === shift.id;
+                    return (
+                      <ShiftCol key={shift.id} shift={shift} idx={idx} highlight={isMe?"#F0FFF4":"#fff"} faded={!slot.ok && !isMe}
+                        badge={isMe?<span style={{background:C.green,color:"#fff",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>שלי</span>:null}>
+                        <div style={{marginBottom:10}}><Bar val={slot.used} max={slot.max} /></div>
+                        {!myShiftId && (isPending ? (
+                          <div>
+                            <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 8px",marginBottom:6,textAlign:"center"}}>
+                              <div style={{fontSize:11,fontWeight:900,color:C.red}}>שים/י לב!</div>
+                              <div style={{fontSize:9,fontWeight:800,color:C.red}}>לא ניתן לשנות לאחר הרישום.</div>
                             </div>
-                            {isMe && <span style={{background:C.green,color:"#fff",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>שלי</span>}
+                            <div style={{display:"flex",gap:4}}>
+                              <button onClick={function(){props.onRegister(shift.id);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",background:C.green,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
+                              <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
+                            </div>
                           </div>
-                          <div style={{marginBottom:10}}>
-                            <Bar val={slot.used} max={slot.max} />
-                          </div>
-                          {!myShiftId && (
-                            isPending ? (
-                              <div>
-                                <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 8px",marginBottom:6,textAlign:"center"}}>
-                                  <div style={{fontSize:11,fontWeight:900,color:C.red}}>שים/י לב!</div>
-                                  <div style={{fontSize:9,fontWeight:800,color:C.red}}>לא ניתן לשנות לאחר הרישום.</div>
-                                </div>
-                                <div style={{display:"flex",gap:4}}>
-                                  <button onClick={function(){props.onRegister(shift.id);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",background:C.green,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
-                                  <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <button onClick={function(){if(slot.ok)setConfirming(shift.id);}} disabled={!slot.ok}
-                                style={{width:"100%",padding:"7px 0",borderRadius:7,border:"none",background:slot.ok?"linear-gradient(135deg,#E67E22,#F39C12)":"#E2E8F0",color:slot.ok?"#fff":C.muted,fontSize:11,fontWeight:800,cursor:slot.ok?"pointer":"not-allowed"}}>
-                                {slot.ok?"הירשם/י":"מלאה"}
-                              </button>
-                            )
-                          )}
-                          {myShiftId && !isMe && <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>{slot.ok?(slot.max-slot.used)+" פנויים":"מלאה"}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        ) : (
+                          <button onClick={function(){if(slot.ok)setConfirming(shift.id);}} disabled={!slot.ok}
+                            style={{width:"100%",padding:"7px 0",borderRadius:7,border:"none",background:slot.ok?"linear-gradient(135deg,#E67E22,#F39C12)":"#E2E8F0",color:slot.ok?"#fff":C.muted,fontSize:11,fontWeight:800,cursor:slot.ok?"pointer":"not-allowed"}}>
+                            {slot.ok?"הירשם/י":"מלאה"}
+                          </button>
+                        ))}
+                        {myShiftId && !isMe && <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>{slot.ok?(slot.max-slot.used)+" פנויים":"מלאה"}</div>}
+                      </ShiftCol>
+                    );
+                  })}
+                </DayCard>
               );
             })}
           </div>
@@ -960,7 +988,7 @@ function DayMgrView(props) {
   return (
     <div dir="rtl" style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
       <Hdr icon="📋" title="רישום משמרות" name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
-      <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px"}}>
+      <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 16px"}}>
 
         <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
           <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
@@ -987,14 +1015,8 @@ function DayMgrView(props) {
               </div>
             )}
 
-            {!props.regOpen && !myDay && (
-              <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
-                <div style={{fontSize:40,marginBottom:10}}>🔒</div>
-                <div style={{fontSize:20,fontWeight:900}}>ההרשמה טרם נפתחה</div>
-              </div>
-            )}
+            {!props.regOpen && !myDay && <ClosedBanner />}
 
-            {/* Day cards — each with shifts + day manager slot */}
             {(props.regOpen || myDay) && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               var occupied  = (props.dmOcc[day]||[]).length;
@@ -1002,68 +1024,53 @@ function DayMgrView(props) {
               var dmOk      = occupied < maxSlots;
               var isMyDay   = myDay === day;
               var isPending = confirming === day;
-              return (
-                <div key={day} style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden",border:"2.5px solid "+(isMyDay?C.teal:"transparent")}}>
-                  {/* Day header */}
-                  <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
-                    <span style={{fontSize:11,opacity:.75}}>{dayShifts.length} משמרות</span>
+              var pct = maxSlots > 0 ? Math.min(1, occupied/maxSlots) : 0;
+              var banner = (
+                <div style={{padding:"12px 16px",borderBottom:"1.5px solid #EEF2F7",background:"#F0FDF9",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>📋</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.teal}}>אחראי יום</div>
+                      <div style={{fontSize:11,color:C.muted}}>{occupied}/{maxSlots} נרשמו</div>
+                    </div>
+                    {isMyDay && <span style={{background:C.teal,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
                   </div>
-
-                  {/* Day manager slot */}
-                  <div style={{padding:"12px 16px",borderBottom:"1.5px solid #EEF2F7",background:"#F0FDF9",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:16}}>📋</span>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:C.teal}}>אחראי יום</div>
-                        <div style={{fontSize:11,color:C.muted}}>{occupied}/{maxSlots} נרשמו</div>
-                      </div>
-                      {isMyDay && <span style={{background:C.teal,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
+                  <div style={{flex:1,minWidth:80,maxWidth:200}}>
+                    <div style={{height:5,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",borderRadius:3,width:(pct*100)+"%",background:occupied>=maxSlots?C.red:C.teal}} />
                     </div>
-                    <div style={{flex:1,minWidth:80,maxWidth:160}}>
-                      <div style={{height:5,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
-                        <div style={{height:"100%",borderRadius:3,width:(Math.min(1,occupied/maxSlots)*100)+"%",background:occupied>=maxSlots?C.red:C.teal}} />
-                      </div>
-                    </div>
-                    {!myDay && (
-                      isPending ? (
-                        <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:170}}>
-                          <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 10px",textAlign:"center",fontSize:11,fontWeight:700,color:C.red}}>לא ניתן לשנות לאחר הרישום!</div>
-                          <div style={{display:"flex",gap:5}}>
-                            <button onClick={function(){props.onRegister(day);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"none",background:C.teal,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
-                            <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
-                          </div>
+                  </div>
+                  {!myDay && (
+                    isPending ? (
+                      <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:170}}>
+                        <div style={{background:"#FEF2F2",border:"1.5px solid "+C.red,borderRadius:7,padding:"7px 10px",textAlign:"center",fontSize:11,fontWeight:700,color:C.red}}>לא ניתן לשנות לאחר הרישום!</div>
+                        <div style={{display:"flex",gap:5}}>
+                          <button onClick={function(){props.onRegister(day);setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"none",background:C.teal,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>אישור</button>
+                          <button onClick={function(){setConfirming(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,border:"1px solid "+C.muted,background:"transparent",color:C.muted,fontSize:11,cursor:"pointer"}}>ביטול</button>
                         </div>
-                      ) : (
-                        <button onClick={function(){if(dmOk)setConfirming(day);}} disabled={!dmOk}
-                          style={{padding:"7px 16px",borderRadius:8,border:"none",background:dmOk?"linear-gradient(135deg,#0D9488,#0F766E)":"#E2E8F0",color:dmOk?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:dmOk?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-                          {dmOk?"הירשם/י כאחראי/ת יום":"מלא"}
-                        </button>
-                      )
-                    )}
-                  </div>
-
-                  {/* Shifts info */}
-                  {dayShifts.length > 0 && (
-                    <div style={{padding:"12px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
-                      {dayShifts.map(function(shift) {
-                        var o = props.occ[shift.id]||{volunteers:[],managers:[]};
-                        return (
-                          <div key={shift.id} style={{borderRadius:9,padding:"10px 12px",background:"#F8FAFC",border:"1px solid #EEF2F7"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-                              <span style={{fontSize:14}}>{shift.icon}</span>
-                              <div>
-                                <div style={{fontSize:12,fontWeight:700,color:C.navy}}>{shift.name}</div>
-                                <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
-                              </div>
-                            </div>
-                            <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
-                          </div>
-                        );
-                      })}
-                    </div>
+                      </div>
+                    ) : (
+                      <button onClick={function(){if(dmOk)setConfirming(day);}} disabled={!dmOk}
+                        style={{padding:"7px 16px",borderRadius:8,border:"none",background:dmOk?"linear-gradient(135deg,#0D9488,#0F766E)":"#E2E8F0",color:dmOk?"#fff":C.muted,fontSize:12,fontWeight:800,cursor:dmOk?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+                        {dmOk?"הירשם/י כאחראי/ת יום":"מלא"}
+                      </button>
+                    )
                   )}
                 </div>
+              );
+              return (
+                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"} accent={isMyDay?C.teal:"transparent"} banner={banner}>
+                  {dayShifts.length === 0
+                    ? <div style={{padding:"14px 16px",background:"#fff",fontSize:12,color:C.muted,fontStyle:"italic"}}>אין משמרות ליום זה</div>
+                    : dayShifts.map(function(shift, idx) {
+                        var o = props.occ[shift.id]||{volunteers:[],managers:[]};
+                        return (
+                          <ShiftCol key={shift.id} shift={shift} idx={idx}>
+                            <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
+                          </ShiftCol>
+                        );
+                      })}
+                </DayCard>
               );
             })}
           </div>
@@ -1072,7 +1079,7 @@ function DayMgrView(props) {
     </div>
   );
 }
-// ─── DAY MANAGER VIEW ─────────────────────────────────────────────────────────
+// ─── ROSTER VIEW ─────────────────────────────────────────────────────────────
 function RosterView(props) {
   var sf = useState("all"); var filterDay = sf[0]; var setFilterDay = sf[1];
   var visibleDays = filterDay === "all" ? DAYS : [Number(filterDay)];
@@ -1093,53 +1100,36 @@ function RosterView(props) {
         var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
         if (!dayShifts.length) return null;
         var dayMgrs = (props.dmOcc[day]||[]).map(function(id){ return props.users[id]; }).filter(Boolean);
-
+        var meta = dayMgrs.length > 0 ? ("אחראי יום: " + dayMgrs.map(function(m){return m.name;}).join(", ")) : null;
         return (
-          <div key={day} style={{background:C.card,borderRadius:14,marginBottom:18,boxShadow:"0 2px 8px rgba(0,0,0,.08)",overflow:"hidden"}}>
-            <div style={{background:C.navy,color:"#fff",padding:"11px 18px",display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:16,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
-              {dayMgrs.length > 0 && (
-                <span style={{fontSize:11,opacity:.8}}>
-                  אחראי יום: {dayMgrs.map(function(m){return m.name;}).join(", ")}
-                </span>
-              )}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))"}}>
-              {dayShifts.map(function(shift, idx) {
-                var o = props.occ[shift.id] || {volunteers:[], managers:[]};
-                var volNames = o.volunteers.map(function(id){ return (props.users[id]||{}).name; }).filter(Boolean);
-                var mgrNames = o.managers.map(function(id){ return (props.users[id]||{}).name; }).filter(Boolean);
-                return (
-                  <div key={shift.id} style={{padding:"14px 16px",borderLeft:idx>0?"1px solid #EEF2F7":"none"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
-                      <span style={{fontSize:16}}>{shift.icon}</span>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{shift.name}</div>
-                        <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
-                      </div>
+          <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={meta}>
+            {dayShifts.map(function(shift, idx) {
+              var o = props.occ[shift.id] || {volunteers:[], managers:[]};
+              var volNames = o.volunteers.map(function(id){ return (props.users[id]||{}).name; }).filter(Boolean);
+              var mgrNames = o.managers.map(function(id){ return (props.users[id]||{}).name; }).filter(Boolean);
+              return (
+                <ShiftCol key={shift.id} shift={shift} idx={idx}>
+                  {mgrNames.length > 0 && (
+                    <div style={{marginBottom:8}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.purple,marginBottom:4,letterSpacing:.4}}>אחראים ({mgrNames.length}/{shift.maxManagers})</div>
+                      {mgrNames.map(function(name,i){
+                        return <div key={i} style={{fontSize:12,fontWeight:600,color:"#4C1D95",padding:"2px 0"}}>{name}</div>;
+                      })}
                     </div>
-                    {mgrNames.length > 0 && (
-                      <div style={{marginBottom:8}}>
-                        <div style={{fontSize:10,fontWeight:700,color:C.purple,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>אחראים ({mgrNames.length}/{shift.maxManagers})</div>
-                        {mgrNames.map(function(name,i){
-                          return <div key={i} style={{fontSize:12,fontWeight:600,color:"#4C1D95",padding:"2px 0"}}>{name}</div>;
-                        })}
-                      </div>
-                    )}
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:C.blue,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>מתנדבים ({volNames.length}/{shift.maxVolunteers})</div>
-                      {volNames.length === 0
-                        ? <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>אין נרשמים</div>
-                        : volNames.map(function(name,i){
-                          return <div key={i} style={{fontSize:12,color:C.text,padding:"2px 0",borderBottom:i<volNames.length-1?"1px solid #F0F4F8":"none"}}>{name}</div>;
-                        })
-                      }
-                    </div>
+                  )}
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.blue,marginBottom:4,letterSpacing:.4}}>מתנדבים ({volNames.length}/{shift.maxVolunteers})</div>
+                    {volNames.length === 0
+                      ? <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>אין נרשמים</div>
+                      : volNames.map(function(name,i){
+                        return <div key={i} style={{fontSize:12,color:C.text,padding:"2px 0",borderBottom:i<volNames.length-1?"1px solid #F0F4F8":"none"}}>{name}</div>;
+                      })
+                    }
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </ShiftCol>
+              );
+            })}
+          </DayCard>
         );
       })}
     </div>
@@ -1580,90 +1570,77 @@ function DayView(props) {
         totalReg += (props.dmOcc[day]||[]).length;
         var dayMgrs = (props.dmOcc[day]||[]).map(function(id){ return props.users[id]; }).filter(Boolean);
         var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
-        return (
-          <div key={day} style={{background:C.card,borderRadius:16,marginBottom:20,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden"}}>
-            <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:18,fontWeight:900}}>{props.dayNames[day]||("יום "+day)}</span>
-                <span style={{fontSize:12,opacity:.7}}>{totalReg} נרשמים - {dayShifts.length} משמרות</span>
-              </div>
-              {props.onDayClick && (
-                <button onClick={function(){props.onDayClick(day);}}
-                  style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.4)",color:"#fff",borderRadius:8,padding:"5px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>
-                  + רשום אחראי יום
-                </button>
-              )}
-            </div>
-            <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,textTransform:"uppercase",letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {dayMgrs.length === 0 && <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>אין אחראי יום</span>}
-                {dayMgrs.map(function(m,i) {
-                  return (
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:7,background:"#CCFBF1",borderRadius:7,padding:"5px 10px"}}>
-                      <div style={{width:24,height:24,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
-                      <div>
-                        <div style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</div>
-                        <div style={{fontSize:10,color:C.muted}}>{m.phone}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {dayMgrs.length < maxDm && Array(maxDm - dayMgrs.length).fill(0).map(function(_,i) {
-                  return <div key={"e"+i} style={{display:"flex",alignItems:"center",gap:5,border:"1.5px dashed #5EEAD4",borderRadius:7,padding:"5px 10px"}}><span style={{fontSize:11,color:"#5EEAD4",fontWeight:600}}>+ ממתין</span></div>;
-                })}
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(dayShifts.length,4)+",1fr)"}}>
-              {dayShifts.map(function(shift, idx) {
-                var o = props.occ[shift.id]||{volunteers:[],managers:[]};
-                var mgrs = o.managers.map(function(id){ return props.users[id]; }).filter(Boolean);
-                var vols = o.volunteers.map(function(id){ return props.users[id]; }).filter(Boolean);
+        var action = props.onDayClick ? (
+          <button onClick={function(){props.onDayClick(day);}}
+            style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.4)",color:"#fff",borderRadius:8,padding:"5px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+            + רשום אחראי יום
+          </button>
+        ) : null;
+        var banner = (
+          <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {dayMgrs.length === 0 && <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>אין אחראי יום</span>}
+              {dayMgrs.map(function(m,i) {
                 return (
-                  <div key={shift.id} style={{padding:"16px 18px",borderLeft:idx>0?"1px solid #EEF2F7":"none",minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,paddingBottom:10,borderBottom:"2px solid #EEF2F7"}}>
-                      <span style={{fontSize:16}}>{shift.icon}</span>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{shift.name}</div>
-                        <div style={{fontSize:10,color:C.muted}}>{shift.hours}</div>
-                      </div>
-                    </div>
-                    <div style={{marginBottom:8}}>
-                      <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:4,textTransform:"uppercase"}}>אחראי ({mgrs.length}/{shift.maxManagers})</div>
-                      {mgrs.length === 0
-                        ? <div style={{background:"#FEF9E7",border:"1.5px dashed #F39C12",borderRadius:7,padding:"5px 9px",fontSize:11,color:C.amber,fontWeight:600,textAlign:"center"}}>ממתין</div>
-                        : mgrs.map(function(mgr,mi){
-                          return (
-                            <div key={mi} style={{display:"flex",alignItems:"center",gap:6,background:"#EDE9FE",borderRadius:7,padding:"5px 9px",marginBottom:mi<mgrs.length-1?4:0}}>
-                              <div style={{width:22,height:22,borderRadius:"50%",background:C.purple,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{(mgr.name||"?").charAt(0)}</div>
-                              <div><div style={{fontSize:11,fontWeight:700,color:"#4C1D95"}}>{mgr.name}</div><div style={{fontSize:10,color:C.muted}}>{mgr.phone}</div></div>
-                            </div>
-                          );
-                        })
-                      }
-                    </div>
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:7,background:"#CCFBF1",borderRadius:7,padding:"5px 10px"}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
                     <div>
-                      <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:4,textTransform:"uppercase"}}>מתנדבים ({vols.length}/{shift.maxVolunteers})</div>
-                      {vols.length === 0
-                        ? <div style={{fontSize:10,color:C.muted,fontStyle:"italic"}}>אין נרשמים</div>
-                        : vols.map(function(v,vi) {
-                          return (
-                            <div key={vi} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",borderRadius:6,background:vi%2===0?"#F8FAFC":"#fff"}}>
-                              <span style={{width:20,height:20,borderRadius:"50%",background:C.blue,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{(v.name||"?").charAt(0)}</span>
-                              <div>
-                                <div style={{fontSize:11,fontWeight:700}}>{v.name}</div>
-                                <div style={{fontSize:9,color:C.muted}}>{v.phone}</div>
-                              </div>
-                            </div>
-                          );
-                        })
-                      }
+                      <div style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{m.phone}</div>
                     </div>
                   </div>
                 );
               })}
+              {dayMgrs.length < maxDm && Array(maxDm - dayMgrs.length).fill(0).map(function(_,i) {
+                return <div key={"e"+i} style={{display:"flex",alignItems:"center",gap:5,border:"1.5px dashed #5EEAD4",borderRadius:7,padding:"5px 10px"}}><span style={{fontSize:11,color:"#5EEAD4",fontWeight:600}}>+ ממתין</span></div>;
+              })}
             </div>
           </div>
+        );
+        return (
+          <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={totalReg+" נרשמים - "+dayShifts.length+" משמרות"} action={action} banner={banner}>
+            {dayShifts.map(function(shift, idx) {
+              var o = props.occ[shift.id]||{volunteers:[],managers:[]};
+              var mgrs = o.managers.map(function(id){ return props.users[id]; }).filter(Boolean);
+              var vols = o.volunteers.map(function(id){ return props.users[id]; }).filter(Boolean);
+              return (
+                <ShiftCol key={shift.id} shift={shift} idx={idx}>
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:4}}>אחראי ({mgrs.length}/{shift.maxManagers})</div>
+                    {mgrs.length === 0
+                      ? <div style={{background:"#FEF9E7",border:"1.5px dashed #F39C12",borderRadius:7,padding:"5px 9px",fontSize:11,color:C.amber,fontWeight:600,textAlign:"center"}}>ממתין</div>
+                      : mgrs.map(function(mgr,mi){
+                        return (
+                          <div key={mi} style={{display:"flex",alignItems:"center",gap:6,background:"#EDE9FE",borderRadius:7,padding:"5px 9px",marginBottom:mi<mgrs.length-1?4:0}}>
+                            <div style={{width:22,height:22,borderRadius:"50%",background:C.purple,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{(mgr.name||"?").charAt(0)}</div>
+                            <div><div style={{fontSize:11,fontWeight:700,color:"#4C1D95"}}>{mgr.name}</div><div style={{fontSize:10,color:C.muted}}>{mgr.phone}</div></div>
+                          </div>
+                        );
+                      })
+                    }
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:4}}>מתנדבים ({vols.length}/{shift.maxVolunteers})</div>
+                    {vols.length === 0
+                      ? <div style={{fontSize:10,color:C.muted,fontStyle:"italic"}}>אין נרשמים</div>
+                      : vols.map(function(v,vi) {
+                        return (
+                          <div key={vi} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",borderRadius:6,background:vi%2===0?"#F8FAFC":"#fff"}}>
+                            <span style={{width:20,height:20,borderRadius:"50%",background:C.blue,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{(v.name||"?").charAt(0)}</span>
+                            <div>
+                              <div style={{fontSize:11,fontWeight:700}}>{v.name}</div>
+                              <div style={{fontSize:9,color:C.muted}}>{v.phone}</div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    }
+                  </div>
+                </ShiftCol>
+              );
+            })}
+          </DayCard>
         );
       })}
     </div>
