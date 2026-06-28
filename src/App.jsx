@@ -771,9 +771,9 @@ function Bar(props) {
   var col = pct >= 1 ? C.red : pct >= 0.8 ? C.amber : C.green;
   return (
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
-        <span style={{color:C.muted}}>{props.label || "מקומות"}</span>
-        <span style={{fontWeight:700,color:pct>=1?C.red:C.text}}>{props.max - props.val} / {props.max} פנויים</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:5,fontSize:11,marginBottom:3}}>
+        {props.label ? <span style={{color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{props.label}</span> : <span />}
+        <span style={{fontWeight:800,color:col,whiteSpace:"nowrap"}}>{props.val}/{props.max}</span>
       </div>
       <div style={{height:6,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
         <div style={{height:"100%",borderRadius:3,width:(pct*100)+"%",background:col}} />
@@ -787,11 +787,14 @@ function Bar(props) {
 // registration, the roster, and the admin "by day" view) share this skeleton:
 // one DayCard per day (navy header + optional banner + a column grid), and one
 // ShiftCol per shift inside it. Only the body of each column differs per screen.
-function dayBoardGrid() {
-  return {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:1,background:"#EEF2F7"};
-}
-
 function DayCard(props) {
+  var cols = 4;
+  var kids = React.Children.toArray(props.children);
+  var target = Math.max(cols, Math.ceil(kids.length / cols) * cols);
+  var fillers = [];
+  for (var fi = kids.length; fi < target; fi++) {
+    fillers.push(<div key={"pad-"+fi} style={{background:"#fff"}} />);
+  }
   return (
     <div style={{background:C.card,borderRadius:16,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,.08)",overflow:"hidden",border:"2.5px solid "+(props.accent||"transparent")}}>
       <div style={{background:C.navy,color:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
@@ -802,8 +805,9 @@ function DayCard(props) {
         {props.action || null}
       </div>
       {props.banner || null}
-      <div style={dayBoardGrid()}>
-        {props.children}
+      <div style={{display:"grid",gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))",gap:1,background:"#EEF2F7"}}>
+        {kids}
+        {fillers}
       </div>
     </div>
   );
@@ -812,11 +816,11 @@ function DayCard(props) {
 function ShiftCol(props) {
   var s = props.shift;
   return (
-    <div style={{padding:"14px 16px",background:props.highlight||"#fff",opacity:props.faded?0.6:1,minWidth:0}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
-        <span style={{fontSize:18}}>{s.icon}</span>
+    <div style={{padding:"12px 9px",background:props.highlight||"#fff",opacity:props.faded?0.6:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
+        <span style={{fontSize:17}}>{s.icon}</span>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{s.name}</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.navy,wordBreak:"break-word"}}>{s.name}</div>
           <div style={{fontSize:10,color:C.muted}}>{s.hours}</div>
         </div>
         {props.badge || null}
