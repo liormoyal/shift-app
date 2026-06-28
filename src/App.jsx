@@ -362,6 +362,13 @@ export default function App() {
   },[]);
 
   useEffect(function(){
+    var st = document.createElement("style");
+    st.textContent = "@media (max-width:768px){input,select,textarea{font-size:16px !important}#login-id{font-size:22px !important}}";
+    document.head.appendChild(st);
+    return function(){ if (st.parentNode) st.parentNode.removeChild(st); };
+  },[]);
+
+  useEffect(function(){
     var ch=supabase.channel("live")
       .on("postgres_changes",{event:"*",schema:"public",table:"registrations"},function(p){
         if(p.eventType==="INSERT") setRegs(function(prev){var n=Object.assign({},prev);n[p.new.user_id]=p.new.shift_id;return n;});
@@ -875,7 +882,8 @@ function LoginScreen(props) {
 
         {step === "id" && (
           <div>
-            <input value={idVal} onChange={function(e){setIdVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")next();}} placeholder="000000000" autoFocus
+            <input value={idVal} onChange={function(e){setIdVal(e.target.value.replace(/[^0-9]/g,""));}} onKeyDown={function(e){if(e.key==="Enter")next();}} placeholder="000000000" autoFocus
+              id="login-id" type="tel" inputMode="numeric" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
               style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid " + (props.error?C.red:"#CBD5E0"),fontSize:22,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",direction:"ltr",fontFamily:"monospace",color:"#1A202C",background:"#fff",fontWeight:700}} />
             {props.error && <div style={{background:"#FEF2F2",border:"1px solid "+C.red,borderRadius:8,padding:"7px 12px",marginTop:8,color:C.red,fontSize:13,textAlign:"center"}}>{props.error}</div>}
             <button onClick={next} style={{width:"100%",marginTop:14,padding:"13px 0",background:"linear-gradient(135deg,#E67E22,#F39C12)",color:"#fff",border:"none",borderRadius:10,fontSize:16,fontWeight:800,cursor:"pointer"}}>המשך</button>
