@@ -6,6 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
+var APP_VERSION = "1.0.0";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -722,7 +723,10 @@ function Hdr(props) {
         <img src="/logo.png" alt="logo" style={{width:36,height:36,objectFit:"contain",borderRadius:4}} />
         <div>
           <div style={{fontSize:11,color:"#C4B5FD",fontWeight:700,lineHeight:1}}>מידברן 2026 - מחלקת תנועה</div>
-          <div style={{fontWeight:800,fontSize:15,lineHeight:1.3}}>{props.title}</div>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <span style={{fontWeight:800,fontSize:15,lineHeight:1.3}}>{props.title}</span>
+            <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,.45)"}}>v{APP_VERSION}</span>
+          </div>
         </div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -742,6 +746,23 @@ function DayPill(props) {
     <button onClick={props.onClick} style={{padding:"5px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:active?C.navy:"#fff",color:active?"#fff":C.navy,boxShadow:active?"0 3px 10px rgba(15,45,74,.35)":"0 1px 4px rgba(0,0,0,.1)"}}>
       {props.label}
     </button>
+  );
+}
+
+function Tabs(props) {
+  var sm = props.size === "sm";
+  return (
+    <div style={{display:"flex",gap:sm?3:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",flexWrap:"wrap",width:props.fill?"100%":"fit-content",marginBottom:props.flush?0:22}}>
+      {props.tabs.map(function(t){
+        var on = props.active === t[0];
+        return (
+          <button key={t[0]} onClick={function(){props.onChange(t[0]);}}
+            style={{padding:sm?"6px 11px":"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:sm?11:13,fontWeight:700,background:on?C.navy:"transparent",color:on?"#fff":C.muted}}>
+            {t[1]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -833,14 +854,6 @@ function LoginScreen(props) {
     }
   }
 
-  var samples = [
-    {id:"123456789",label:"מתנדב"},
-    {id:"891234567",label:"אחראי יום"},
-    {id:"567890123",label:"אחראי משמרת"},
-    {id:"111111111",label:"מנהל (Admin123!)"},
-    {id:"000000001",label:"מנהל ראשי (Shift2025!)"},
-  ];
-
   return (
     <div dir="rtl" style={{minHeight:"100vh",background:"url('/login-bg.jpg') center center / cover no-repeat",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
       <div style={{background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",borderRadius:20,padding:"36px 32px",width:"100%",maxWidth:390,boxShadow:"0 30px 80px rgba(0,0,0,.5)"}}>
@@ -905,10 +918,7 @@ function VolView(props) {
       <Hdr icon="🗓" title="רישום משמרות" name={props.me.name} sub={(isMgr?"אחראי משמרת":"מתנדב")+" - ת.ז. "+props.me.id} onLogout={props.onLogout} />
       <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 16px"}}>
 
-        <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
-          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>{regLabel}</button>
-          <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
-        </div>
+        <Tabs tabs={[["register",regLabel],["roster","📋 רשימת משמרות"]]} active={view} onChange={setView} />
 
         {view === "roster" && (
           <RosterView shifts={props.shifts} occ={props.occ} users={props.users||{}} dayNames={props.dayNames} dmOcc={props.dmOcc||{}} dmRegs={props.dmRegs||{}} />
@@ -990,10 +1000,7 @@ function DayMgrView(props) {
       <Hdr icon="📋" title="רישום משמרות" name={props.me.name} sub={"אחראי יום - ת.ז. "+props.me.id} onLogout={props.onLogout} />
       <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 16px"}}>
 
-        <div style={{display:"flex",gap:4,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",width:"fit-content",marginBottom:22}}>
-          <button onClick={function(){setView("register");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="register"?C.navy:"transparent",color:view==="register"?"#fff":C.muted}}>הרשמה</button>
-          <button onClick={function(){setView("roster");}} style={{padding:"7px 18px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:view==="roster"?C.navy:"transparent",color:view==="roster"?"#fff":C.muted}}>📋 רשימת משמרות</button>
-        </div>
+        <Tabs tabs={[["register","הרשמה"],["roster","📋 רשימת משמרות"]]} active={view} onChange={setView} />
 
         {view === "roster" && (
           <RosterView shifts={props.shifts||[]} occ={props.occ||{}} users={props.users||{}} dayNames={props.dayNames} dmOcc={props.dmOcc||{}} dmRegs={props.dmRegs||{}} />
@@ -1024,21 +1031,17 @@ function DayMgrView(props) {
               var dmOk      = occupied < maxSlots;
               var isMyDay   = myDay === day;
               var isPending = confirming === day;
-              var pct = maxSlots > 0 ? Math.min(1, occupied/maxSlots) : 0;
               var banner = (
                 <div style={{padding:"12px 16px",borderBottom:"1.5px solid #EEF2F7",background:"#F0FDF9",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:16}}>📋</span>
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:C.teal}}>אחראי יום</div>
-                      <div style={{fontSize:11,color:C.muted}}>{occupied}/{maxSlots} נרשמו</div>
                     </div>
                     {isMyDay && <span style={{background:C.teal,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:800}}>שלי</span>}
                   </div>
-                  <div style={{flex:1,minWidth:80,maxWidth:200}}>
-                    <div style={{height:5,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:3,width:(pct*100)+"%",background:occupied>=maxSlots?C.red:C.teal}} />
-                    </div>
+                  <div style={{flex:1,minWidth:120,maxWidth:240}}>
+                    <Bar val={occupied} max={maxSlots} />
                   </div>
                   {!myDay && (
                     isPending ? (
@@ -1237,15 +1240,7 @@ function AdminPanel(props) {
         </div>
 
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:18}}>
-          <div style={{display:"flex",gap:3,background:"#fff",borderRadius:10,padding:3,boxShadow:"0 1px 4px rgba(0,0,0,.08)",flexWrap:"wrap"}}>
-            {TABS.map(function(t) {
-              return (
-                <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:"6px 11px",borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab===t[0]?C.navy:"transparent",color:tab===t[0]?"#fff":C.muted}}>
-                  {t[1]}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs tabs={TABS} active={tab} onChange={setTab} size="sm" flush={true} />
           <button onClick={function(){doExport(props.users,props.shifts,props.regs,props.dmRegs,props.dayNames);}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#1D6F42,#27AE60)",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
             ⬇ ייצוא לאקסל
           </button>
@@ -1517,8 +1512,6 @@ function ShiftsGrid(props) {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
               {dayShifts.map(function(shift) {
                 var o = props.occ[shift.id] || {volunteers:[],managers:[]};
-                var vPct = shift.maxVolunteers > 0 ? o.volunteers.length / shift.maxVolunteers : 0;
-                var mOk = o.managers.length >= shift.maxManagers;
                 return (
                   <div key={shift.id}
                     onClick={clickable ? function(){ props.onShiftClick(shift); } : undefined}
@@ -1536,10 +1529,7 @@ function ShiftsGrid(props) {
                     <div style={{marginBottom:8}}>
                       <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
                     </div>
-                    <div style={{background:mOk?"#D5F5E3":"#FEF9E7",borderRadius:7,padding:"5px 10px",display:"flex",justifyContent:"space-between"}}>
-                      <span style={{fontSize:11,color:C.muted}}>אחראי משמרת</span>
-                      <span style={{fontSize:11,fontWeight:800,color:mOk?C.green:C.amber}}>{o.managers.length}/{shift.maxManagers} {mOk?"מאויש":"ממתין"}</span>
-                    </div>
+                    <Bar val={o.managers.length} max={shift.maxManagers} label="אחראי משמרת" />
                     {clickable && (
                       <div style={{marginTop:10,textAlign:"center",fontSize:11,color:C.blue,fontWeight:600}}>+ רשום מתנדב/ת</div>
                     )}
