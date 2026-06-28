@@ -815,8 +815,13 @@ function DayCard(props) {
 
 function ShiftCol(props) {
   var s = props.shift;
+  var clickable = !!props.onClick;
+  var base = props.highlight || "#fff";
   return (
-    <div style={{padding:"12px 9px",background:props.highlight||"#fff",opacity:props.faded?0.6:1,minWidth:0}}>
+    <div onClick={props.onClick}
+      onMouseEnter={clickable?function(e){e.currentTarget.style.background="#F1F5FB";}:undefined}
+      onMouseLeave={clickable?function(e){e.currentTarget.style.background=base;}:undefined}
+      style={{padding:"12px 9px",background:base,opacity:props.faded?0.6:1,minWidth:0,cursor:clickable?"pointer":"default"}}>
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:10,paddingBottom:8,borderBottom:"1.5px solid #EEF2F7"}}>
         <span style={{fontSize:17}}>{s.icon}</span>
         <div style={{flex:1,minWidth:0}}>
@@ -1511,37 +1516,22 @@ function ShiftsGrid(props) {
         var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
         if (!dayShifts.length) return null;
         return (
-          <div key={day} style={{marginBottom:24}}>
-            <div style={{marginBottom:10}}><span style={{background:C.navy,color:"#fff",borderRadius:6,padding:"2px 11px",fontSize:12,fontWeight:700}}>{props.dayNames[day]||("יום "+day)}</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
-              {dayShifts.map(function(shift) {
-                var o = props.occ[shift.id] || {volunteers:[],managers:[]};
-                return (
-                  <div key={shift.id}
-                    onClick={clickable ? function(){ props.onShiftClick(shift); } : undefined}
-                    style={{background:C.card,borderRadius:13,padding:16,boxShadow:"0 2px 8px rgba(0,0,0,.08)",cursor:clickable?"pointer":"default",transition:clickable?"box-shadow 0.15s":"none",border:"2px solid transparent"}}
-                    onMouseEnter={clickable?function(e){e.currentTarget.style.boxShadow="0 4px 16px rgba(15,45,74,.2)";e.currentTarget.style.borderColor="#CBD5E0";}:undefined}
-                    onMouseLeave={clickable?function(e){e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.08)";e.currentTarget.style.borderColor="transparent";}:undefined}
-                  >
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7}}>
-                        <span style={{fontSize:18}}>{shift.icon}</span>
-                        <span style={{fontSize:15,fontWeight:800,color:C.navy}}>{shift.name}</span>
-                      </div>
-                      <span style={{fontSize:10,color:C.muted}}>{shift.hours}</span>
-                    </div>
-                    <div style={{marginBottom:8}}>
-                      <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
-                    </div>
-                    <Bar val={o.managers.length} max={shift.maxManagers} label="אחראי משמרת" />
-                    {clickable && (
-                      <div style={{marginTop:10,textAlign:"center",fontSize:11,color:C.blue,fontWeight:600}}>+ רשום מתנדב/ת</div>
-                    )}
+          <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"}>
+            {dayShifts.map(function(shift) {
+              var o = props.occ[shift.id] || {volunteers:[],managers:[]};
+              return (
+                <ShiftCol key={shift.id} shift={shift} onClick={clickable ? function(){ props.onShiftClick(shift); } : undefined}>
+                  <div style={{marginBottom:8}}>
+                    <Bar val={o.volunteers.length} max={shift.maxVolunteers} label="מתנדבים" />
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <Bar val={o.managers.length} max={shift.maxManagers} label="אחראים" />
+                  {clickable && (
+                    <div style={{marginTop:10,textAlign:"center",fontSize:11,color:C.blue,fontWeight:700}}>+ רישום</div>
+                  )}
+                </ShiftCol>
+              );
+            })}
+          </DayCard>
         );
       })}
     </div>
