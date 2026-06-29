@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.1";
+var APP_VERSION = "1.0.4";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -220,7 +220,7 @@ function parseImport(file, onDone, onError) {
 // --- DB: load everything on startup ------------------------------------------
 async function loadAll() {
   var r = await Promise.all([
-    supabase.from("users").select("*"),
+    supabase.from("users").select("id,type,name,phone,email,hr"),
     supabase.from("shift_defs").select("*").order("day").order("sort_order"),
     supabase.from("registrations").select("*"),
     supabase.from("day_manager_regs").select("*"),
@@ -233,7 +233,7 @@ async function loadAll() {
 
   var users={};
   (usersRes.data||[]).forEach(function(u){
-    users[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,password:u.password,hr:u.hr||null};
+    users[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,hr:u.hr||null};
   });
 
   var shiftMap={};
@@ -397,10 +397,19 @@ export default function App() {
   },[]);
 
   function handleLogin(id,pass){
-    var key=id.trim(),u=users[key];
-    if(!u){setLoginErr("מספר ת.ז. לא תקין.");return;}
-    if(u.type==="admin"||u.type==="superadmin"){if(pass!==u.password){setLoginErr("סיסמה שגויה.");return;}}
-    setMe(Object.assign({id:key},u)); setLoginErr("");
+    var key=id.trim();
+    if(!key){setLoginErr("מספר ת.ז. לא תקין.");return;}
+    supabase.rpc("verify_login",{p_id:key,p_password:pass||""}).then(function(res){
+      if(res.error){setLoginErr("שגיאת התחברות. נסה/י שוב.");return;}
+      var rows=res.data||[];
+      if(!rows.length){
+        setLoginErr(users[key] ? "סיסמה שגויה." : "מספר ת.ז. לא תקין.");
+        return;
+      }
+      var row=rows[0];
+      setMe(Object.assign({},users[key]||{},{id:row.id,type:row.type,name:row.name,pw:pass||""}));
+      setLoginErr("");
+    });
   }
 
   function handleRegister(shiftId){
@@ -481,7 +490,7 @@ export default function App() {
   }
 
   function handleDeleteUser(uid){
-    supabase.from("users").delete().eq("id",uid).then(function(res){
+    supabase.rpc("admin_delete_user",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:uid}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setUsers(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"delete_user",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:null,actorId:me.id,actorName:me.name,actorType:me.type};
@@ -495,17 +504,17 @@ export default function App() {
       var obj = {id:u.id, type:u.type, name:u.name};
       if(u.phone)    obj.phone    = u.phone;
       if(u.email)    obj.email    = u.email;
-      if(u.password) obj.password = String(u.password);
       if(u.hr)       obj.hr       = u.hr;
+      if(u.password) obj.password = String(u.password);
       return obj;
     });
-    supabase.from("users").upsert(cleaned,{onConflict:"id"}).then(function(res){
+    supabase.rpc("admin_import_users",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_rows:cleaned}).then(function(res){
       if(res.error){alert("שגיאה בייבוא: "+res.error.message);return;}
       setUsers(function(prev){
         var n=Object.assign({},prev);
         for(var i=0;i<newArr.length;i++){
           var u=newArr[i];
-          n[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,password:u.password||null,hr:u.hr||null};
+          n[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,hr:u.hr||null};
         }
         return n;
       });
@@ -523,8 +532,7 @@ export default function App() {
           var changed = existing.name !== u.name ||
             (existing.phone||"") !== (u.phone||"") ||
             (existing.email||"") !== (u.email||"") ||
-            (existing.hr||"") !== (u.hr||"") ||
-            (existing.password||"") !== (u.password||"");
+            (existing.hr||"") !== (u.hr||"");
           if (!changed) return; // nothing changed — skip log
           logType = "import_update";
         }
@@ -546,8 +554,7 @@ export default function App() {
 
   function handleUpdateShift(day,shiftId,field,value){
     var dbField=field==="maxVol"?"max_volunteers":field==="maxMgr"?"max_managers":field;
-    var upd={}; upd[dbField]=value;
-    supabase.from("shift_defs").update(upd).eq("id",shiftId).then(function(res){
+    supabase.rpc("admin_update_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId,p_field:dbField,p_value:String(value)}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).map(function(s){if(s.id!==shiftId)return s;var ns=Object.assign({},s);ns[field]=value;return ns;});return next;});
     });
@@ -557,14 +564,14 @@ export default function App() {
     var newId=makeShiftId(day);
     var maxOrder=0;var arr=shiftMap[day]||[];
     for(var i=0;i<arr.length;i++) if(arr[i].sortOrder>maxOrder) maxOrder=arr[i].sortOrder;
-    supabase.from("shift_defs").insert({id:newId,day:day,name:"משמרת חדשה",hours:"00:00-00:00",icon:"⭐",max_volunteers:10,max_managers:1,sort_order:maxOrder+1}).then(function(res){
+    supabase.rpc("admin_add_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:newId,p_day:day,p_sort:maxOrder+1}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).concat([{id:newId,name:"משמרת חדשה",hours:"00:00-00:00",icon:"⭐",maxVol:10,maxMgr:1,sortOrder:maxOrder+1}]);return next;});
     });
   }
 
   function handleRemoveShift(day,shiftId){
-    supabase.from("shift_defs").delete().eq("id",shiftId).then(function(res){
+    supabase.rpc("admin_remove_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).filter(function(s){return s.id!==shiftId;});return next;});
       setRegs(function(prev){var n=Object.assign({},prev);var keys=Object.keys(n);for(var i=0;i<keys.length;i++){if(n[keys[i]]===shiftId)delete n[keys[i]];}return n;});
@@ -572,7 +579,7 @@ export default function App() {
   }
 
   function handleUpdateDayName(day,name){
-    supabase.from("day_configs").update({name:name}).eq("day",day).then(function(res){
+    supabase.rpc("admin_set_day_name",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_name:name}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDayNames(function(p){var n=Object.assign({},p);n[day]=name;return n;});
     });
@@ -580,7 +587,7 @@ export default function App() {
 
   function handleUpdateDayConfig(day,val){
     var v=Math.min(2,Math.max(0,Number(val)));
-    supabase.from("day_configs").update({max_day_managers:v}).eq("day",day).then(function(res){
+    supabase.rpc("admin_set_day_config",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_max:v}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDayConfs(function(p){var n=Object.assign({},p);n[day]={maxDayMgr:v};return n;});
     });
@@ -588,7 +595,7 @@ export default function App() {
 
   function handleToggleReg(){
     var v=regOpen?"false":"true";
-    supabase.from("app_settings").update({value:v}).eq("key","registration_open").then(function(res){
+    supabase.rpc("admin_set_setting",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_key:"registration_open",p_value:v}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegOpen(!regOpen);
     });
@@ -596,7 +603,7 @@ export default function App() {
 
   function handleToggleSelfRemove(){
     var v=allowSelfRemove?"false":"true";
-    supabase.from("app_settings").update({value:v}).eq("key","allow_self_remove").then(function(res){
+    supabase.rpc("admin_set_setting",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_key:"allow_self_remove",p_value:v}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setAllowSelfRemove(!allowSelfRemove);
     });
@@ -1819,11 +1826,9 @@ function AllUsers(props) {
                     </td>
                     {props.isSup && (
                       <td style={{padding:"9px 12px"}}>
-                        {row.u.type==="admin"
-                          ? <span style={{fontFamily:"monospace",fontSize:10,background:"#F0F4F8",padding:"2px 6px",borderRadius:4}}>{row.u.password||"-"}</span>
-                          : row.u.type==="superadmin"
-                            ? <span style={{fontSize:10,color:C.muted}}>מוגנת</span>
-                            : <span style={{fontSize:10,color:C.muted}}>-</span>
+                        {row.u.type==="admin" || row.u.type==="superadmin"
+                          ? <span style={{fontSize:10,color:C.muted}}>🔒 מוצפנת</span>
+                          : <span style={{fontSize:10,color:C.muted}}>-</span>
                         }
                       </td>
                     )}
@@ -2318,7 +2323,7 @@ function ImportView(props) {
     <div style={{maxWidth:720}}>
       <div style={{background:C.card,borderRadius:14,padding:"18px 22px",boxShadow:"0 2px 8px rgba(0,0,0,.08)",marginBottom:20}}>
         <h3 style={{color:C.navy,margin:"0 0 5px",fontSize:17,fontWeight:800}}>ייבוא משתמשים מאקסל</h3>
-        <p style={{color:C.muted,margin:0,fontSize:12,lineHeight:1.6}}>עמודות: id, type, name, phone, email, password, hr<br/>סוגים: volunteer, manager, day_manager, admin, superadmin<br/>ייבוא כפול: פרטים מתעדכנים, שיבוץ נשמר. שינוי תפקיד — אסור אם המשתמש רשום.</p>
+        <p style={{color:C.muted,margin:0,fontSize:12,lineHeight:1.6}}>עמודות: id, type, name, phone, email, password, hr<br/>סוגים: volunteer, manager, day_manager, admin, superadmin<br/>סיסמאות מוצפנות אוטומטית בשרת בעת הייבוא.<br/>ייבוא כפול: פרטים מתעדכנים, שיבוץ נשמר. שינוי תפקיד — אסור אם המשתמש רשום.</p>
       </div>
 
       <div style={{border:"2.5px dashed "+(dragging?"#2563EB":"#CBD5E0"),borderRadius:14,padding:"38px 28px",textAlign:"center",cursor:"pointer",background:dragging?"#EFF6FF":"#F8FAFC"}}
@@ -2352,8 +2357,7 @@ function ImportView(props) {
                     existing.name !== u.name ||
                     (existing.phone||"") !== (u.phone||"") ||
                     (existing.email||"") !== (u.email||"") ||
-                    (existing.hr||"") !== (u.hr||"") ||
-                    (existing.password||"") !== (u.password||"")
+                    (existing.hr||"") !== (u.hr||"")
                   );
                   return (
                     <tr key={id} style={{background:i%2===0?"#fff":"#F8FAFC",borderBottom:"1px solid #EEF2F7"}}>
