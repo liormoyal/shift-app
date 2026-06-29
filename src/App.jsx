@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.4";
+var APP_VERSION = "1.0.5";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -220,7 +220,7 @@ function parseImport(file, onDone, onError) {
 // --- DB: load everything on startup ------------------------------------------
 async function loadAll() {
   var r = await Promise.all([
-    supabase.from("users").select("id,type,name,phone,email,hr"),
+    supabase.from("users").select("id,type,name"),
     supabase.from("shift_defs").select("*").order("day").order("sort_order"),
     supabase.from("registrations").select("*"),
     supabase.from("day_manager_regs").select("*"),
@@ -233,7 +233,7 @@ async function loadAll() {
 
   var users={};
   (usersRes.data||[]).forEach(function(u){
-    users[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,hr:u.hr||null};
+    users[u.id]={type:u.type,name:u.name};
   });
 
   var shiftMap={};
@@ -409,6 +409,16 @@ export default function App() {
       var row=rows[0];
       setMe(Object.assign({},users[key]||{},{id:row.id,type:row.type,name:row.name,pw:pass||""}));
       setLoginErr("");
+      if(row.type==="admin"||row.type==="superadmin"){
+        supabase.rpc("admin_list_users",{p_actor_id:row.id,p_actor_pw:pass||""}).then(function(r2){
+          if(r2.error||!r2.data)return;
+          setUsers(function(prev){
+            var n=Object.assign({},prev);
+            r2.data.forEach(function(u){ n[u.id]={type:u.type,name:u.name,phone:u.phone,email:u.email,hr:u.hr||null}; });
+            return n;
+          });
+        });
+      }
     });
   }
 
