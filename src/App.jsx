@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.5";
+var APP_VERSION = "1.0.7";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -403,7 +403,7 @@ export default function App() {
       if(res.error){setLoginErr("שגיאת התחברות. נסה/י שוב.");return;}
       var rows=res.data||[];
       if(!rows.length){
-        setLoginErr(users[key] ? "סיסמה שגויה." : "מספר ת.ז. לא תקין.");
+        setLoginErr("מספר ת.ז. או סיסמה שגויים.");
         return;
       }
       var row=rows[0];
@@ -423,9 +423,9 @@ export default function App() {
   }
 
   function handleRegister(shiftId){
-    supabase.rpc("register_for_shift",{p_user_id:me.id,p_shift_id:shiftId}).then(function(res){
+    supabase.rpc("register_self",{p_user_id:me.id,p_pw:me.pw||"",p_shift_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
-      if(!res.data.success){var m={shift_full:"המשמרת מלאה.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה."};alert(m[res.data.error]||res.data.error);return;}
+      if(!res.data.success){var m={shift_full:"המשמרת מלאה.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה.",unauthorized:"אימות נכשל. התחבר/י מחדש."};alert(m[res.data.error]||res.data.error);return;}
       setRegs(function(p){var n=Object.assign({},p);n[me.id]=shiftId;return n;});
       var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
       var e={type:"register",userId:me.id,userName:me.name,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
@@ -438,7 +438,7 @@ export default function App() {
     var dayConfig = dayConfs[day] || {maxDayMgr:2};
     if ((dmOcc[day]||[]).length >= dayConfig.maxDayMgr) { alert("היום מלא — אין מקום לאחראי יום נוסף."); return; }
     if (dmRegs[userId]) { alert("המשתמש כבר רשום ליום אחר."); return; }
-    supabase.from("day_manager_regs").insert({user_id:userId, day:day}).then(function(res){
+    supabase.rpc("admin_register_dm",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_user_id:userId,p_day:day}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
@@ -456,7 +456,7 @@ export default function App() {
       if (u && u.type==="volunteer" && o.volunteers.length >= shift.maxVolunteers) { alert("המשמרת מלאה."); return; }
       if (u && u.type==="manager"   && o.managers.length   >= shift.maxManagers)   { alert("אין מקום לאחראי משמרת נוסף."); return; }
     }
-    supabase.from("registrations").insert({user_id:userId, shift_id:shiftId}).then(function(res){
+    supabase.rpc("admin_register_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_user_id:userId,p_shift_id:shiftId}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
@@ -466,9 +466,9 @@ export default function App() {
   }
 
   function handleDmRegister(day){
-    supabase.rpc("register_day_manager",{p_user_id:me.id,p_day:day}).then(function(res){
+    supabase.rpc("register_dm_self",{p_user_id:me.id,p_pw:me.pw||"",p_day:day}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
-      if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה."};alert(m[res.data.error]||res.data.error);return;}
+      if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה.",unauthorized:"אימות נכשל. התחבר/י מחדש."};alert(m[res.data.error]||res.data.error);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[me.id]=day;return n;});
       var e={type:"register",userId:me.id,userName:me.name,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e); pushLog(setLog,e);
@@ -479,7 +479,7 @@ export default function App() {
   function handleRemove(uid){
     var sid=regs[uid];
     var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===sid){shift=shifts[i];break;}}
-    supabase.from("registrations").delete().eq("user_id",uid).then(function(res){
+    supabase.rpc("unregister",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_target_id:uid}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:sid,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
@@ -490,7 +490,7 @@ export default function App() {
 
   function handleDmRemove(uid){
     var day=dmRegs[uid];
-    supabase.from("day_manager_regs").delete().eq("user_id",uid).then(function(res){
+    supabase.rpc("unregister_dm",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_target_id:uid}).then(function(res){
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDmRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
@@ -888,13 +888,8 @@ function LoginScreen(props) {
 
   function next() {
     var key = idVal.trim();
-    var u = props.users[key];
-    if (!u) { props.onLogin(key, ""); return; }
-    if (u.type === "admin" || u.type === "superadmin") {
-      setDetType(u.type); setStep("password");
-    } else {
-      props.onLogin(key, "");
-    }
+    if (!key) return;
+    setStep("password");
   }
 
   return (
@@ -920,12 +915,12 @@ function LoginScreen(props) {
         {step === "password" && (
           <div>
             <div style={{background:"#F0F4F8",borderRadius:9,padding:"9px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:9}}>
-              <span style={{fontSize:18}}>{detType==="superadmin"?"👑":"🛠"}</span>
+              <span style={{fontSize:18}}>🔑</span>
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:C.navy}}>{(props.users[idVal.trim()]||{}).name}</div>
-                <div style={{fontSize:11,color:C.muted}}>{(TYPE_INFO[detType]||{}).label} - ת.ז. {idVal.trim()}</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.navy}}>ת.ז. {idVal.trim()}</div>
+                <div style={{fontSize:11,color:C.muted}}>הזן/י סיסמה כדי להיכנס</div>
               </div>
-              <button onClick={function(){setStep("id");setPassVal("");setDetType(null);}} style={{marginRight:"auto",background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>חזור</button>
+              <button onClick={function(){setStep("id");setPassVal("");}} style={{marginRight:"auto",background:"none",border:"none",color:C.muted,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>חזור</button>
             </div>
             <input type="password" value={passVal} onChange={function(e){setPassVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")props.onLogin(idVal.trim(),passVal);}} placeholder="סיסמה" autoFocus
               style={{width:"100%",padding:"13px 16px",borderRadius:10,border:"2.5px solid "+(props.error?C.red:"#CBD5E0"),fontSize:18,textAlign:"center",outline:"none",boxSizing:"border-box",color:"#1A202C",background:"#fff",fontWeight:700,letterSpacing:3}} />
