@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.7";
+var APP_VERSION = "1.0.9";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -226,9 +226,8 @@ async function loadAll() {
     supabase.from("day_manager_regs").select("*"),
     supabase.from("day_configs").select("*").order("day"),
     supabase.from("app_settings").select("*"),
-    supabase.from("activity_log").select("*").order("created_at",{ascending:false}).limit(500),
   ]);
-  var usersRes=r[0],shiftsRes=r[1],regsRes=r[2],dmRes=r[3],dcRes=r[4],settRes=r[5],logRes=r[6];
+  var usersRes=r[0],shiftsRes=r[1],regsRes=r[2],dmRes=r[3],dcRes=r[4],settRes=r[5];
   if(usersRes.error) throw usersRes.error;
 
   var users={};
@@ -260,11 +259,7 @@ async function loadAll() {
     if(s.key==="allow_self_remove") allowSelfRemove=s.value!=="false";
   });
 
-  var log=(logRes.data||[]).map(function(e){
-    return{id:e.id,type:e.type,userId:e.user_id,userName:e.user_name,
-      shiftId:e.shift_id,shiftName:e.shift_name,shiftHours:e.shift_hours,
-      dayLabel:e.day_label,actorId:e.actor_id,actorName:e.actor_name,actorType:e.actor_type,ts:e.created_at};
-  });
+  var log=[]; // activity log is admin-only; loaded via admin_list_log after login
 
   return{users,shiftMap,regs,dmRegs,dayConfigs,dayNames,regOpen,allowSelfRemove,log};
 }
@@ -323,13 +318,14 @@ function syncMonday(userId, status, dayLabel, shiftHours) {
   });
 }
 
-function dbLog(entry){
-  supabase.from("activity_log").insert({
-    type:entry.type,user_id:entry.userId,user_name:entry.userName,
-    shift_id:entry.shiftId,shift_name:entry.shiftName,shift_hours:entry.shiftHours,
-    day_label:entry.dayLabel,actor_id:entry.actorId,actor_name:entry.actorName,actor_type:entry.actorType,
+function dbLog(entry, pw){
+  supabase.rpc("write_log",{
+    p_actor_id:entry.actorId, p_actor_pw:pw||"",
+    p_type:entry.type, p_user_id:entry.userId||null, p_user_name:entry.userName||null,
+    p_shift_id:entry.shiftId||null, p_shift_name:entry.shiftName||null,
+    p_shift_hours:entry.shiftHours||null, p_day_label:entry.dayLabel||null,
   }).then(function(res){
-    if(res.error) console.error("LOG FAILED:", res.error.code, res.error.message);
+    if(res.error) console.error("LOG FAILED:", res.error.message);
   });
 }
 
@@ -400,7 +396,11 @@ export default function App() {
     var key=id.trim();
     if(!key){setLoginErr("מספר ת.ז. לא תקין.");return;}
     supabase.rpc("verify_login",{p_id:key,p_password:pass||""}).then(function(res){
-      if(res.error){setLoginErr("שגיאת התחברות. נסה/י שוב.");return;}
+      if(res.error){
+        if(res.error.message && res.error.message.indexOf("too_many_attempts")>=0) setLoginErr("יותר מדי ניסיונות כושלים. נסה/י שוב בעוד 10 דקות.");
+        else setLoginErr("שגיאת התחברות. נסה/י שוב.");
+        return;
+      }
       var rows=res.data||[];
       if(!rows.length){
         setLoginErr("מספר ת.ז. או סיסמה שגויים.");
@@ -418,6 +418,14 @@ export default function App() {
             return n;
           });
         });
+        supabase.rpc("admin_list_log",{p_actor_id:row.id,p_actor_pw:pass||""}).then(function(r3){
+          if(r3.error||!r3.data)return;
+          setLog(r3.data.map(function(e){
+            return{id:e.id,type:e.type,userId:e.user_id,userName:e.user_name,
+              shiftId:e.shift_id,shiftName:e.shift_name,shiftHours:e.shift_hours,
+              dayLabel:e.day_label,actorId:e.actor_id,actorName:e.actor_name,actorType:e.actor_type,ts:e.created_at};
+          }));
+        });
       }
     });
   }
@@ -429,7 +437,7 @@ export default function App() {
       setRegs(function(p){var n=Object.assign({},p);n[me.id]=shiftId;return n;});
       var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
       var e={type:"register",userId:me.id,userName:me.name,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(me.id, "1", shift?(dayNames[shift.day]||("יום "+shift.day)):"", shift?shift.hours:"");
     });
   }
@@ -442,7 +450,7 @@ export default function App() {
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(userId, "1", dayNames[day]||("יום "+day), "אחראי יום");
     });
   }
@@ -460,7 +468,7 @@ export default function App() {
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(userId, "1", shift?(dayNames[shift.day]||("יום "+shift.day)):"", shift?shift.hours:"");
     });
   }
@@ -471,7 +479,7 @@ export default function App() {
       if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה.",unauthorized:"אימות נכשל. התחבר/י מחדש."};alert(m[res.data.error]||res.data.error);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[me.id]=day;return n;});
       var e={type:"register",userId:me.id,userName:me.name,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(me.id, "1", dayNames[day]||("יום "+day), "אחראי יום");
     });
   }
@@ -483,7 +491,7 @@ export default function App() {
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:sid,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(uid, null, "", "");  // keep status, clear shift fields
     });
   }
@@ -494,7 +502,7 @@ export default function App() {
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setDmRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(uid, null, "", "");  // keep status, clear shift fields
     });
   }
@@ -504,7 +512,7 @@ export default function App() {
       if(res.error){alert("שגיאה: "+res.error.message);return;}
       setUsers(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"delete_user",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:null,actorId:me.id,actorName:me.name,actorType:me.type};
-      dbLog(e); pushLog(setLog,e);
+      dbLog(e, me.pw); pushLog(setLog,e);
       syncMonday(uid, "2", "", "");
     });
   }
@@ -550,7 +558,7 @@ export default function App() {
         // Sync new users to Monday as "קיים"
         if (logType === "import_new") syncMonday(id, "1", "", "");
       });
-      logEntries.forEach(function(e){ supabase.from("activity_log").insert(e); });
+      logEntries.forEach(function(e){ supabase.rpc("write_log",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_type:e.type,p_user_id:e.user_id,p_user_name:e.user_name,p_shift_id:null,p_shift_name:null,p_shift_hours:null,p_day_label:null}); });
       setLog(function(prev){
         var newEntries = logEntries.map(function(e){
           return{id:Date.now()+Math.random(),type:e.type,userId:e.user_id,userName:e.user_name,
