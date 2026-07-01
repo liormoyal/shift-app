@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.1.0";
+var APP_VERSION = "1.1.1";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -279,21 +279,62 @@ function mondayQuery(query) {
   }).then(function(r){ return r.json(); });
 }
 
-function findMondayItem(idNumber) {
-  var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id name } } } }';
-  return mondayQuery(q).then(function(data) {
-    try {
-      var items = data.data.boards[0].items_page.items;
-      for (var i = 0; i < items.length; i++) {
-        if ((items[i].name||"").trim() === String(idNumber).trim()) {
-          return items[i].id;
-        }
+// Fetch EVERY item on the board via cursor pagination (fix #5 — the old
+// items_page(limit:500) silently dropped user #501+). Resolves to a
+// { byName: {trimmedName -> itemId}, items: [...] } map.
+function fetchAllMondayItems() {
+  var byName = {};
+  var all = [];
+  function page(cursor) {
+    var q = cursor
+      ? 'query { next_items_page(limit: 500, cursor: "' + cursor + '") { cursor items { id name } } }'
+      : '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { cursor items { id name } } } }';
+    return mondayQuery(q).then(function(data) {
+      var pageData, items, next;
+      try {
+        pageData = cursor ? data.data.next_items_page : data.data.boards[0].items_page;
+        items = pageData.items || [];
+        next  = pageData.cursor || null;
+      } catch(err) {
+        console.error("Monday pagination error:", err, data);
+        return {byName: byName, items: all, error: true};
       }
-      return null;
-    } catch(err) {
-      console.error("Monday findMondayItem error:", err);
-      return null;
-    }
+      for (var i = 0; i < items.length; i++) {
+        all.push(items[i]);
+        byName[(items[i].name||"").trim()] = items[i].id;
+      }
+      if (next) return page(next);
+      return {byName: byName, items: all};
+    });
+  }
+  return page(null);
+}
+
+// Run column-update mutations one at a time with a small delay so we stay
+// under Monday's complexity/rate budget (fix #4). Collects failures instead
+// of firing-and-forgetting. jobs: [{itemId, colValues, id, name}].
+function runMondayMutations(jobs, delayMs) {
+  var failed = [];
+  var i = 0;
+  function step() {
+    if (i >= jobs.length) return Promise.resolve({failed: failed});
+    var job = jobs[i++];
+    var colValStr = JSON.stringify(JSON.stringify(job.colValues));
+    var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + job.itemId + ', column_values: ' + colValStr + ') { id } }';
+    return mondayQuery(mutation)
+      .then(function(res){ if (res && res.errors) failed.push({id: job.id, name: job.name, errors: res.errors}); })
+      .catch(function(err){ failed.push({id: job.id, name: job.name, errors: String(err)}); })
+      .then(function(){
+        if (delayMs) return new Promise(function(r){ setTimeout(r, delayMs); }).then(step);
+        return step();
+      });
+  }
+  return step();
+}
+
+function findMondayItem(idNumber) {
+  return fetchAllMondayItems().then(function(r) {
+    return r.byName[String(idNumber).trim()] || null;
   });
 }
 
@@ -538,6 +579,7 @@ export default function App() {
       });
       // Log each imported user — skip if nothing changed
       var logEntries = [];
+      var newUserIds = [];
       newArr.forEach(function(u){
         var id=u.id; var existing=users[id];
         var logType;
@@ -555,8 +597,7 @@ export default function App() {
           logType = "import_update";
         }
         logEntries.push({type:logType,user_id:id,user_name:u.name,actor_id:me.id,actor_name:me.name,actor_type:me.type});
-        // Sync new users to Monday as "קיים"
-        if (logType === "import_new") syncMonday(id, "1", "", "");
+        if (logType === "import_new") newUserIds.push({id:id, name:u.name});
       });
       logEntries.forEach(function(e){ supabase.rpc("write_log",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_type:e.type,p_user_id:e.user_id,p_user_name:e.user_name,p_shift_id:null,p_shift_name:null,p_shift_hours:null,p_day_label:null}); });
       setLog(function(prev){
@@ -567,6 +608,20 @@ export default function App() {
         });
         return newEntries.concat(prev);
       });
+      // Sync new users to Monday as "קיים" — ONE paginated board fetch, then
+      // throttled updates (was: a full board scan per new user).
+      if (newUserIds.length) {
+        fetchAllMondayItems().then(function(r){
+          if (r.error) return;
+          var jobs = [];
+          for (var i = 0; i < newUserIds.length; i++) {
+            var itemId = r.byName[String(newUserIds[i].id).trim()];
+            if (!itemId) continue; // absent in Monday — Broadcast will report it later
+            jobs.push({itemId: itemId, colValues: {"color_mm4qvjcs": {label: "קיים"}}, id: newUserIds[i].id, name: newUserIds[i].name});
+          }
+          runMondayMutations(jobs, 120);
+        });
+      }
     });
   }
 
@@ -629,20 +684,13 @@ export default function App() {
 
   // Broadcast all users to Monday
   function handleBroadcastToMonday(onResult) {
-    // Fetch all Monday items once
-    var q = '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { items { id name } } } }';
-    mondayQuery(q).then(function(data) {
-      var mondayItems = {};
-      try {
-        var items = data.data.boards[0].items_page.items;
-        for (var i = 0; i < items.length; i++) {
-          mondayItems[(items[i].name||"").trim()] = items[i].id;
-        }
-      } catch(err) {
-        alert("שגיאה בטעינת מאנדיי: " + err.message); return;
-      }
+    // Fetch the whole board once (paginated), then update sequentially.
+    fetchAllMondayItems().then(function(r) {
+      if (r.error) { alert("שגיאה בטעינת מאנדיי. נסה שוב."); onResult([], []); return; }
+      var mondayItems = r.byName;
 
       var missing = [];
+      var jobs = [];
       var ukeys = Object.keys(users);
       for (var j = 0; j < ukeys.length; j++) {
         var uid = ukeys[j];
@@ -677,12 +725,12 @@ export default function App() {
           colValues["text_mm4qsdfw"] = "";
         }
 
-        var colValStr = JSON.stringify(JSON.stringify(colValues));
-        var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + itemId + ', column_values: ' + colValStr + ') { id } }';
-        mondayQuery(mutation);
+        jobs.push({itemId: itemId, colValues: colValues, id: uid, name: u.name});
       }
 
-      onResult(missing);
+      runMondayMutations(jobs, 120).then(function(res){
+        onResult(missing, res.failed);
+      });
     });
   }
 
@@ -2046,6 +2094,7 @@ function ConfigView(props) {
   var sc = useState(null); var confirmDel = sc[0]; var setConfirmDel = sc[1];
   var sb = useState(false); var broadcasting = sb[0]; var setBroadcasting = sb[1];
   var sm = useState(null); var missingUsers = sm[0]; var setMissingUsers = sm[1];
+  var sfl = useState(null); var failedUsers = sfl[0]; var setFailedUsers = sfl[1];
 
   function regCount(shiftId) {
     var keys = Object.keys(props.regs);
@@ -2057,9 +2106,11 @@ function ConfigView(props) {
   function handleBroadcast() {
     setBroadcasting(true);
     setMissingUsers(null);
-    props.onBroadcastToMonday(function(missing) {
+    setFailedUsers(null);
+    props.onBroadcastToMonday(function(missing, failed) {
       setBroadcasting(false);
-      setMissingUsers(missing);
+      setMissingUsers(missing || []);
+      setFailedUsers(failed || []);
     });
   }
 
@@ -2084,30 +2135,55 @@ function ConfigView(props) {
         </div>
         {missingUsers !== null && (
           <div style={{marginTop:14}}>
-            {missingUsers.length === 0 ? (
+            {missingUsers.length === 0 && (!failedUsers || failedUsers.length === 0) ? (
               <div style={{background:"#D5F5E3",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.green}}>
                 השידור הושלם בהצלחה — כל המשתמשים עודכנו במאנדיי
               </div>
             ) : (
               <div>
-                <div style={{background:"#FEF2F2",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.red,marginBottom:8}}>
-                  {missingUsers.length} משתמשים חסרים במאנדיי:
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {missingUsers.map(function(u){
-                    var tm = TYPE_INFO[u.type]||{label:u.type,bg:"#F1F5F9",col:C.muted};
-                    return (
-                      <div key={u.id} style={{background:"#FEF2F2",borderRadius:8,padding:"9px 14px",display:"flex",alignItems:"center",gap:10,border:"1px solid #FED7D7"}}>
-                        <div style={{width:32,height:32,borderRadius:"50%",background:tm.bg,color:tm.col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(u.name||"?").charAt(0)}</div>
-                        <div>
-                          <div style={{fontWeight:700,fontSize:13,color:C.text}}>{u.name}</div>
-                          <div style={{fontSize:11,color:C.muted,fontFamily:"monospace"}}>ת.ז. {u.id} · {tm.label}</div>
-                        </div>
-                        <span style={{marginRight:"auto",fontSize:11,fontWeight:700,color:C.red}}>חסר במאנדיי</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {failedUsers && failedUsers.length > 0 && (
+                  <div style={{marginBottom:missingUsers.length?12:0}}>
+                    <div style={{background:"#FEF3C7",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.amber,marginBottom:8}}>
+                      {failedUsers.length} עדכונים נכשלו (ייתכן עומס על מאנדיי — נסה שוב):
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {failedUsers.map(function(u){
+                        return (
+                          <div key={u.id} style={{background:"#FFFBEB",borderRadius:8,padding:"9px 14px",display:"flex",alignItems:"center",gap:10,border:"1px solid #FDE68A"}}>
+                            <div style={{width:32,height:32,borderRadius:"50%",background:"#FEF3C7",color:C.amber,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(u.name||"?").charAt(0)}</div>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:13,color:C.text}}>{u.name}</div>
+                              <div style={{fontSize:11,color:C.muted,fontFamily:"monospace"}}>ת.ז. {u.id}</div>
+                            </div>
+                            <span style={{marginRight:"auto",fontSize:11,fontWeight:700,color:C.amber}}>עדכון נכשל</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {missingUsers.length > 0 && (
+                  <div>
+                    <div style={{background:"#FEF2F2",borderRadius:9,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.red,marginBottom:8}}>
+                      {missingUsers.length} משתמשים חסרים במאנדיי:
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {missingUsers.map(function(u){
+                        var tm = TYPE_INFO[u.type]||{label:u.type,bg:"#F1F5F9",col:C.muted};
+                        return (
+                          <div key={u.id} style={{background:"#FEF2F2",borderRadius:8,padding:"9px 14px",display:"flex",alignItems:"center",gap:10,border:"1px solid #FED7D7"}}>
+                            <div style={{width:32,height:32,borderRadius:"50%",background:tm.bg,color:tm.col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(u.name||"?").charAt(0)}</div>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:13,color:C.text}}>{u.name}</div>
+                              <div style={{fontSize:11,color:C.muted,fontFamily:"monospace"}}>ת.ז. {u.id} · {tm.label}</div>
+                            </div>
+                            <span style={{marginRight:"auto",fontSize:11,fontWeight:700,color:C.red}}>חסר במאנדיי</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
