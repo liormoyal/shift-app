@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.2.3";
+var APP_VERSION = "1.2.4";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -1092,7 +1092,7 @@ function VolView(props) {
 
             {!props.regOpen && !myShift && <ClosedBanner />}
 
-            {(props.regOpen || myShift) && DAYS.map(function(day) {
+            {props.regOpen && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               if (!dayShifts.length) return null;
               return (
@@ -1170,7 +1170,7 @@ function DayMgrView(props) {
 
             {!props.regOpen && !myDay && <ClosedBanner />}
 
-            {(props.regOpen || myDay) && DAYS.map(function(day) {
+            {props.regOpen && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               var occupied  = (props.dmOcc[day]||[]).length;
               var maxSlots  = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
