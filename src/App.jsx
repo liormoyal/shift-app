@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.1.2";
+var APP_VERSION = "1.1.3";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -314,7 +314,7 @@ function fetchAllMondayItems() {
 // Fast enough for hundreds of users, still well under Monday's rate budget.
 // Collects failures and reports progress; always resolves. onProgress(done,total).
 function runMondayMutations(jobs, onProgress) {
-  var CONCURRENCY = 3;
+  var CONCURRENCY = 5;
   var failed = [];
   var i = 0, active = 0, done = 0, settled = false;
   return new Promise(function(resolve) {
