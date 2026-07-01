@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.1.4";
+var APP_VERSION = "1.2.0";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -277,29 +277,37 @@ async function loadAll() {
 }
 
 // --- Monday.com sync --------------------------------------------------------
-var MONDAY_BOARD_ID = "18419606261";
-// API key is no longer in the frontend — all calls go through the /api/monday
-// serverless proxy, which holds MONDAY_API_KEY server-side (no VITE_ prefix).
+// The browser never sends raw GraphQL. It sends a small typed intent to
+// /api/monday, which builds the exact query server-side, pins it to the one
+// board, and only allows the specific columns this app uses. The endpoint
+// can't be driven as an open gateway to the board.
+//   { action: "list", cursor? }                    -> paginated id+name read
+//   { action: "update", itemId, columnValues }     -> column update on one item
 
-function mondayQuery(query) {
+function mondayCall(intent) {
   return fetch("/api/monday", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: query }),
+    body: JSON.stringify(intent),
   }).then(function(r){ return r.json(); });
 }
 
-// Fetch EVERY item on the board via cursor pagination (fix #5 — the old
-// items_page(limit:500) silently dropped user #501+). Resolves to a
-// { byName: {trimmedName -> itemId}, items: [...] } map.
-function fetchAllMondayItems() {
+// Fetch EVERY item on the board via cursor pagination (the server caps each
+// page at 500). Resolves to { byName: {trimmedName -> itemId}, items: [...] }.
+// Successful results are cached for 60s so a burst of single registrations
+// doesn't re-scan the whole board each time; pass {force:true} to bypass
+// (broadcast and import do, since they need the freshest board).
+var _mondayBoardCache = { t: 0, data: null };
+function fetchAllMondayItems(opts) {
+  var force = opts && opts.force;
+  var now = Date.now();
+  if (!force && _mondayBoardCache.data && (now - _mondayBoardCache.t) < 60000) {
+    return Promise.resolve(_mondayBoardCache.data);
+  }
   var byName = {};
   var all = [];
   function page(cursor) {
-    var q = cursor
-      ? 'query { next_items_page(limit: 500, cursor: "' + cursor + '") { cursor items { id name } } }'
-      : '{ boards(ids: ' + MONDAY_BOARD_ID + ') { items_page(limit: 500) { cursor items { id name } } } }';
-    return mondayQuery(q).then(function(data) {
+    return mondayCall({action: "list", cursor: cursor || null}).then(function(data) {
       var pageData, items, next;
       try {
         pageData = cursor ? data.data.next_items_page : data.data.boards[0].items_page;
@@ -314,15 +322,17 @@ function fetchAllMondayItems() {
         byName[(items[i].name||"").trim()] = items[i].id;
       }
       if (next) return page(next);
-      return {byName: byName, items: all};
+      var result = {byName: byName, items: all};
+      _mondayBoardCache = { t: Date.now(), data: result };
+      return result;
     });
   }
   return page(null);
 }
 
-// Run column-update mutations through a small concurrency pool (fix #4).
-// Fast enough for hundreds of users, still well under Monday's rate budget.
-// Collects failures and reports progress; always resolves. onProgress(done,total).
+// Run column-update intents through a small concurrency pool. Fast enough for
+// hundreds of users, still well under Monday's rate budget. Collects failures
+// and reports progress; always resolves. onProgress(done, total).
 function runMondayMutations(jobs, onProgress) {
   var CONCURRENCY = 5;
   var failed = [];
@@ -341,10 +351,8 @@ function runMondayMutations(jobs, onProgress) {
       }
     }
     function runOne(job) {
-      var colValStr = JSON.stringify(JSON.stringify(job.colValues));
-      var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + job.itemId + ', column_values: ' + colValStr + ') { id } }';
-      mondayQuery(mutation)
-        .then(function(res){ if (res && res.errors) failed.push({id: job.id, name: job.name, errors: res.errors}); })
+      mondayCall({action: "update", itemId: job.itemId, columnValues: job.colValues})
+        .then(function(res){ if (res && (res.errors || res.error)) failed.push({id: job.id, name: job.name, errors: res.errors || res.error}); })
         .catch(function(err){ failed.push({id: job.id, name: job.name, errors: String(err)}); })
         .then(function(){
           active--; done++;
@@ -366,7 +374,9 @@ function findMondayItem(idNumber) {
 function syncMonday(userId, status, dayLabel, shiftHours) {
   findMondayItem(userId).then(function(itemId) {
     if (!itemId) {
-      alert("שים לב: המשתמש עם ת.ז. " + userId + " חסר במאנדיי.\nהפעולה בוצעה במערכת אך לא עודכנה במאנדיי.");
+      // Board is out of sync for this person; the "Broadcast" screen lists who's
+      // missing. Log quietly instead of interrupting the flow with an alert.
+      console.warn("Monday: no item for user " + userId + " — skipped sync.");
       return;
     }
     var colValues = {};
@@ -376,10 +386,8 @@ function syncMonday(userId, status, dayLabel, shiftHours) {
     }
     if (dayLabel   !== undefined) colValues["text_mm4qxbn0"] = dayLabel   || "";
     if (shiftHours !== undefined) colValues["text_mm4qsdfw"] = shiftHours || "";
-    var colValStr = JSON.stringify(JSON.stringify(colValues));
-    var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + itemId + ', column_values: ' + colValStr + ') { id } }';
-    mondayQuery(mutation).then(function(res) {
-      if (res.errors) console.error("Monday sync error:", res.errors);
+    mondayCall({action: "update", itemId: itemId, columnValues: colValues}).then(function(res) {
+      if (res && (res.errors || res.error)) console.error("Monday sync error:", res.errors || res.error);
     });
   });
 }
@@ -636,7 +644,7 @@ export default function App() {
       // Sync new users to Monday as "קיים" — ONE paginated board fetch, then
       // throttled updates (was: a full board scan per new user).
       if (newUserIds.length) {
-        fetchAllMondayItems().then(function(r){
+        fetchAllMondayItems({force:true}).then(function(r){
           if (r.error) return;
           var jobs = [];
           for (var i = 0; i < newUserIds.length; i++) {
@@ -650,11 +658,24 @@ export default function App() {
     });
   }
 
+  // Debounced RPC sender for config edits: the UI updates instantly on every
+  // keystroke, but the (bcrypt-checked) RPC fires once per field, 600ms after
+  // typing stops — instead of one round-trip per character.
+  var debounceRef = useRef({});
+  function debouncedRpc(key, fn) {
+    var timers = debounceRef.current;
+    if (timers[key]) clearTimeout(timers[key]);
+    timers[key] = setTimeout(function(){ delete timers[key]; fn(); }, 600);
+  }
+
   function handleUpdateShift(day,shiftId,field,value){
+    // Instant local update — no waiting for the server to echo each keystroke.
+    setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).map(function(s){if(s.id!==shiftId)return s;var ns=Object.assign({},s);ns[field]=value;return ns;});return next;});
     var dbField=field==="maxVol"?"max_volunteers":field==="maxMgr"?"max_managers":field;
-    supabase.rpc("admin_update_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId,p_field:dbField,p_value:String(value)}).then(function(res){
-      if(res.error){alert(friendlyError(res.error));return;}
-      setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).map(function(s){if(s.id!==shiftId)return s;var ns=Object.assign({},s);ns[field]=value;return ns;});return next;});
+    debouncedRpc("shift:"+shiftId+":"+field, function(){
+      supabase.rpc("admin_update_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId,p_field:dbField,p_value:String(value)}).then(function(res){
+        if(res.error){alert(friendlyError(res.error));}
+      });
     });
   }
 
@@ -677,9 +698,11 @@ export default function App() {
   }
 
   function handleUpdateDayName(day,name){
-    supabase.rpc("admin_set_day_name",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_name:name}).then(function(res){
-      if(res.error){alert(friendlyError(res.error));return;}
-      setDayNames(function(p){var n=Object.assign({},p);n[day]=name;return n;});
+    setDayNames(function(p){var n=Object.assign({},p);n[day]=name;return n;});
+    debouncedRpc("dayname:"+day, function(){
+      supabase.rpc("admin_set_day_name",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_name:name}).then(function(res){
+        if(res.error){alert(friendlyError(res.error));}
+      });
     });
   }
 
@@ -710,7 +733,7 @@ export default function App() {
   // Broadcast all users to Monday
   function handleBroadcastToMonday(onResult, onProgress) {
     // Fetch the whole board once (paginated), then update with a concurrency pool.
-    fetchAllMondayItems().then(function(r) {
+    fetchAllMondayItems({force:true}).then(function(r) {
       if (r.error) { onResult([], [{id:"—", name:"שגיאה בטעינת מאנדיי — נסה שוב", errors:"load"}]); return; }
       var mondayItems = r.byName;
 
@@ -1398,8 +1421,8 @@ function AdminPanel(props) {
           </div>
         )}
 
-        {tab === "shifts"       && <ShiftsGrid shifts={props.shifts} occ={props.occ} dayNames={props.dayNames} filterDay={filterDay} onShiftClick={function(shift){setSelectedShift(shift);}} />}
-        {selectedShift && (
+        {tab === "shifts"       && <ShiftsGrid shifts={props.shifts} occ={props.occ} dayNames={props.dayNames} filterDay={filterDay} dmOcc={props.dmOcc} dayConfigs={props.dayConfigs} users={props.users} onShiftClick={function(shift){setSelectedShift(shift);}} onDayClick={function(day){setSelectedShift({isDayMgr:true,day:day});}} />}
+        {selectedShift && !selectedShift.isDayMgr && (
           <AdminRegisterModal
             shift={selectedShift}
             users={props.users}
@@ -1645,12 +1668,42 @@ function ShiftsGrid(props) {
   var clickable = !!props.onShiftClick;
   return (
     <div>
-      {clickable && <div style={{fontSize:12,color:C.muted,marginBottom:14}}>לחץ על משמרת כדי לרשום אליה מתנדב/ת</div>}
+      {clickable && <div style={{fontSize:12,color:C.muted,marginBottom:14}}>לחץ על משמרת כדי לרשום אליה מתנדב/ת, או על "+ רשום אחראי יום" בכותרת היום</div>}
       {visibleDays.map(function(day) {
         var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
         if (!dayShifts.length) return null;
+        var dayMgrs = ((props.dmOcc||{})[day]||[]).map(function(id){ return (props.users||{})[id]; }).filter(Boolean);
+        var maxDm = ((props.dayConfigs||{})[day]||{maxDayMgr:2}).maxDayMgr;
+        var action = props.onDayClick ? (
+          <button onClick={function(){props.onDayClick(day);}}
+            style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.4)",color:"#fff",borderRadius:8,padding:"5px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+            + רשום אחראי יום
+          </button>
+        ) : null;
+        var banner = (
+          <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {dayMgrs.length === 0 && <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>אין אחראי יום</span>}
+              {dayMgrs.map(function(m,i) {
+                return (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:7,background:"#CCFBF1",borderRadius:7,padding:"5px 10px"}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{m.phone}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {dayMgrs.length < maxDm && Array(maxDm - dayMgrs.length).fill(0).map(function(_,i) {
+                return <div key={"e"+i} style={{display:"flex",alignItems:"center",gap:5,border:"1.5px dashed #5EEAD4",borderRadius:7,padding:"5px 10px"}}><span style={{fontSize:11,color:"#5EEAD4",fontWeight:600}}>+ ממתין</span></div>;
+              })}
+            </div>
+          </div>
+        );
         return (
-          <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"}>
+          <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"} action={action} banner={banner}>
             {dayShifts.map(function(shift) {
               var o = props.occ[shift.id] || {volunteers:[],managers:[]};
               return (
