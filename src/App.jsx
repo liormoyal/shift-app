@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.1.1";
+var APP_VERSION = "1.1.2";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -310,26 +310,41 @@ function fetchAllMondayItems() {
   return page(null);
 }
 
-// Run column-update mutations one at a time with a small delay so we stay
-// under Monday's complexity/rate budget (fix #4). Collects failures instead
-// of firing-and-forgetting. jobs: [{itemId, colValues, id, name}].
-function runMondayMutations(jobs, delayMs) {
+// Run column-update mutations through a small concurrency pool (fix #4).
+// Fast enough for hundreds of users, still well under Monday's rate budget.
+// Collects failures and reports progress; always resolves. onProgress(done,total).
+function runMondayMutations(jobs, onProgress) {
+  var CONCURRENCY = 3;
   var failed = [];
-  var i = 0;
-  function step() {
-    if (i >= jobs.length) return Promise.resolve({failed: failed});
-    var job = jobs[i++];
-    var colValStr = JSON.stringify(JSON.stringify(job.colValues));
-    var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + job.itemId + ', column_values: ' + colValStr + ') { id } }';
-    return mondayQuery(mutation)
-      .then(function(res){ if (res && res.errors) failed.push({id: job.id, name: job.name, errors: res.errors}); })
-      .catch(function(err){ failed.push({id: job.id, name: job.name, errors: String(err)}); })
-      .then(function(){
-        if (delayMs) return new Promise(function(r){ setTimeout(r, delayMs); }).then(step);
-        return step();
-      });
-  }
-  return step();
+  var i = 0, active = 0, done = 0, settled = false;
+  return new Promise(function(resolve) {
+    function pump() {
+      if (settled) return;
+      if (i >= jobs.length && active === 0) {
+        settled = true;
+        resolve({failed: failed});
+        return;
+      }
+      while (active < CONCURRENCY && i < jobs.length) {
+        active++;
+        runOne(jobs[i++]);
+      }
+    }
+    function runOne(job) {
+      var colValStr = JSON.stringify(JSON.stringify(job.colValues));
+      var mutation = 'mutation { change_multiple_column_values(board_id: ' + MONDAY_BOARD_ID + ', item_id: ' + job.itemId + ', column_values: ' + colValStr + ') { id } }';
+      mondayQuery(mutation)
+        .then(function(res){ if (res && res.errors) failed.push({id: job.id, name: job.name, errors: res.errors}); })
+        .catch(function(err){ failed.push({id: job.id, name: job.name, errors: String(err)}); })
+        .then(function(){
+          active--; done++;
+          if (onProgress) { try { onProgress(done, jobs.length); } catch(e){} }
+          pump();
+        });
+    }
+    if (jobs.length === 0) { resolve({failed: failed}); return; }
+    pump();
+  });
 }
 
 function findMondayItem(idNumber) {
@@ -619,7 +634,7 @@ export default function App() {
             if (!itemId) continue; // absent in Monday — Broadcast will report it later
             jobs.push({itemId: itemId, colValues: {"color_mm4qvjcs": {label: "קיים"}}, id: newUserIds[i].id, name: newUserIds[i].name});
           }
-          runMondayMutations(jobs, 120);
+          runMondayMutations(jobs);
         });
       }
     });
@@ -683,10 +698,10 @@ export default function App() {
   }
 
   // Broadcast all users to Monday
-  function handleBroadcastToMonday(onResult) {
-    // Fetch the whole board once (paginated), then update sequentially.
+  function handleBroadcastToMonday(onResult, onProgress) {
+    // Fetch the whole board once (paginated), then update with a concurrency pool.
     fetchAllMondayItems().then(function(r) {
-      if (r.error) { alert("שגיאה בטעינת מאנדיי. נסה שוב."); onResult([], []); return; }
+      if (r.error) { onResult([], [{id:"—", name:"שגיאה בטעינת מאנדיי — נסה שוב", errors:"load"}]); return; }
       var mondayItems = r.byName;
 
       var missing = [];
@@ -728,9 +743,13 @@ export default function App() {
         jobs.push({itemId: itemId, colValues: colValues, id: uid, name: u.name});
       }
 
-      runMondayMutations(jobs, 120).then(function(res){
+      if (onProgress) onProgress(0, jobs.length);
+      runMondayMutations(jobs, onProgress).then(function(res){
         onResult(missing, res.failed);
       });
+    }).catch(function(err){
+      console.error("Broadcast failed:", err);
+      onResult([], [{id:"—", name:"שגיאה כללית בשידור — נסה שוב", errors:String(err)}]);
     });
   }
 
@@ -2095,6 +2114,7 @@ function ConfigView(props) {
   var sb = useState(false); var broadcasting = sb[0]; var setBroadcasting = sb[1];
   var sm = useState(null); var missingUsers = sm[0]; var setMissingUsers = sm[1];
   var sfl = useState(null); var failedUsers = sfl[0]; var setFailedUsers = sfl[1];
+  var spr = useState(null); var progress = spr[0]; var setProgress = spr[1];
 
   function regCount(shiftId) {
     var keys = Object.keys(props.regs);
@@ -2107,10 +2127,14 @@ function ConfigView(props) {
     setBroadcasting(true);
     setMissingUsers(null);
     setFailedUsers(null);
+    setProgress(null);
     props.onBroadcastToMonday(function(missing, failed) {
       setBroadcasting(false);
+      setProgress(null);
       setMissingUsers(missing || []);
       setFailedUsers(failed || []);
+    }, function(done, total) {
+      setProgress({done: done, total: total});
     });
   }
 
@@ -2130,7 +2154,7 @@ function ConfigView(props) {
           </div>
           <button onClick={handleBroadcast} disabled={broadcasting}
             style={{padding:"10px 22px",borderRadius:10,border:"none",cursor:broadcasting?"not-allowed":"pointer",fontSize:14,fontWeight:800,background:broadcasting?"#E2E8F0":"linear-gradient(135deg,#7C3AED,#6D28D9)",color:broadcasting?C.muted:"#fff",minWidth:140}}>
-            {broadcasting?"שידור...":"📡 שידור למאנדיי"}
+            {broadcasting ? (progress ? "שידור... " + progress.done + "/" + progress.total : "שידור...") : "📡 שידור למאנדיי"}
           </button>
         </div>
         {missingUsers !== null && (
