@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.2.0";
+var APP_VERSION = "1.2.1";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -1094,29 +1094,8 @@ function VolView(props) {
             {(props.regOpen || myShift) && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               if (!dayShifts.length) return null;
-              var dayMgrs = (props.dmOcc[day]||[]).map(function(id){ return props.users[id]; }).filter(Boolean);
-              var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
-              var banner = (
-                <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {dayMgrs.length === 0 && <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>טרם שובץ אחראי יום</span>}
-                    {dayMgrs.map(function(m,i) {
-                      return (
-                        <div key={i} style={{display:"flex",alignItems:"center",gap:7,background:"#CCFBF1",borderRadius:7,padding:"5px 10px"}}>
-                          <div style={{width:24,height:24,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
-                          <div style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</div>
-                        </div>
-                      );
-                    })}
-                    {dayMgrs.length < maxDm && Array(maxDm - dayMgrs.length).fill(0).map(function(_,i) {
-                      return <div key={"e"+i} style={{display:"flex",alignItems:"center",gap:5,border:"1.5px dashed #5EEAD4",borderRadius:7,padding:"5px 10px"}}><span style={{fontSize:11,color:"#5EEAD4",fontWeight:600}}>+ ממתין</span></div>;
-                    })}
-                  </div>
-                </div>
-              );
               return (
-                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"} banner={banner}>
+                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"}>
                   {dayShifts.map(function(shift, idx) {
                     var slot = getSlot(shift);
                     var isMe = shift.id === myShiftId;
