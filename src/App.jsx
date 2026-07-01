@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.2.1";
+var APP_VERSION = "1.2.3";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -163,6 +163,7 @@ function friendlyError(err, fallback) {
     ["shift_full", "המשמרת מלאה."],
     ["day_full", "היום מלא."],
     ["registration_closed", "ההרשמה סגורה."],
+    ["self_remove_disabled", "ביטול עצמי מושבת. יש לפנות למנהל."],
     ["user_not_found", "המשתמש לא נמצא."],
     ["shift_not_found", "המשמרת לא נמצאה."],
     ["too_many_attempts", "יותר מדי ניסיונות. נסה/י שוב מאוחר יותר."],
@@ -1078,13 +1079,13 @@ function VolView(props) {
                 <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>נרשם/ה למשמרת</div>
                 <div style={{fontSize:22,fontWeight:800}}>{props.dayNames[myShift.day]||("יום "+myShift.day)} — {myShift.icon} {myShift.name}</div>
                 <div style={{fontSize:14,opacity:.85,marginTop:3}}>{myShift.hours}</div>
-                {props.allowSelfRemove ? (
+                {(props.allowSelfRemove && props.regOpen) ? (
                   <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                     <button onClick={props.onSelfRemove} style={{padding:"9px 20px",borderRadius:9,border:"2px solid rgba(255,255,255,.7)",background:"rgba(255,255,255,.15)",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>ביטול רישום וחזרה לבחירה</button>
                     <span style={{fontSize:11,opacity:.75}}>ניתן להירשם מחדש לאחר הביטול</span>
                   </div>
                 ) : (
-                  <div style={{marginTop:12,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"8px 12px",fontSize:12}}>רוצה להחליף? יש לפנות למנהל.</div>
+                  <div style={{marginTop:12,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"8px 12px",fontSize:12}}>{!props.regOpen ? "ההרשמה סגורה — לשינוי שיבוץ יש לפנות למנהל." : "רוצה להחליף? יש לפנות למנהל."}</div>
                 )}
               </div>
             )}
@@ -1157,12 +1158,12 @@ function DayMgrView(props) {
               <div style={{background:"linear-gradient(135deg,#0D9488,#0F766E)",color:"#fff",borderRadius:14,padding:"20px 24px",marginBottom:24}}>
                 <div style={{fontSize:12,opacity:.85,marginBottom:4,fontWeight:600}}>רשום/ה כאחראי/ת יום</div>
                 <div style={{fontSize:22,fontWeight:800}}>📋 {props.dayNames[myDay]||("יום "+myDay)}</div>
-                {props.allowSelfRemove ? (
+                {(props.allowSelfRemove && props.regOpen) ? (
                   <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                     <button onClick={props.onSelfRemove} style={{padding:"9px 20px",borderRadius:9,border:"2px solid rgba(255,255,255,.7)",background:"rgba(255,255,255,.15)",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>ביטול רישום וחזרה לבחירה</button>
                   </div>
                 ) : (
-                  <div style={{marginTop:10,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"7px 11px",fontSize:12}}>רוצה להחליף יום? יש לפנות למנהל.</div>
+                  <div style={{marginTop:10,background:"rgba(0,0,0,.18)",borderRadius:8,padding:"7px 11px",fontSize:12}}>{!props.regOpen ? "ההרשמה סגורה — לשינוי שיבוץ יש לפנות למנהל." : "רוצה להחליף יום? יש לפנות למנהל."}</div>
                 )}
               </div>
             )}
