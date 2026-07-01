@@ -23,10 +23,12 @@ var TYPE_INFO = {
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-var _sid = 1000;
 function makeShiftId(day) {
-  _sid = _sid + 1;
-  return day + "-x" + _sid;
+  // Collision-proof: unique per call and stable across page reloads.
+  var rand = (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID().slice(0, 8)
+    : Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return day + "-x" + rand;
 }
 
 function flatShifts(shiftMap) {
@@ -266,16 +268,14 @@ async function loadAll() {
 
 // --- Monday.com sync --------------------------------------------------------
 var MONDAY_BOARD_ID = "18419606261";
-var MONDAY_API_KEY  = import.meta.env.VITE_MONDAY_API_KEY;
+// API key is no longer in the frontend — all calls go through the /api/monday
+// serverless proxy, which holds MONDAY_API_KEY server-side (no VITE_ prefix).
 
 function mondayQuery(query) {
-  return fetch("https://api.monday.com/v2", {
+  return fetch("/api/monday", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": MONDAY_API_KEY,
-    },
-    body: JSON.stringify({query: query}),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: query }),
   }).then(function(r){ return r.json(); });
 }
 
@@ -2446,4 +2446,3 @@ function ImportView(props) {
     </div>
   );
 }
-
