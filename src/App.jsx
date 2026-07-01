@@ -5,8 +5,8 @@ import { supabase } from "./supabase";
 
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
-var DAYS  = [1,2,3,4,5,6,7,8,9,10];
-var APP_VERSION = "1.0.9";
+var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
+var APP_VERSION = "1.1.0";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -67,7 +67,7 @@ function getOccupancy(shifts, users, regs) {
 
 function getDayMgrOcc(dmRegs) {
   var occ = {};
-  for (var d = 1; d <= 10; d++) occ[d] = [];
+  for (var d = 1; d <= 11; d++) occ[d] = [];
   var codes = Object.keys(dmRegs);
   for (var i = 0; i < codes.length; i++) {
     var day = dmRegs[codes[i]];
@@ -1243,7 +1243,7 @@ function AdminPanel(props) {
   }
 
   var maxDmCap = 0;
-  for (var dc = 1; dc <= 10; dc++) maxDmCap += (props.dayConfigs[dc]||{maxDayMgr:2}).maxDayMgr;
+  for (var dc = 1; dc <= 11; dc++) maxDmCap += (props.dayConfigs[dc]||{maxDayMgr:2}).maxDayMgr;
 
   var stats = [
     {label:"נרשמו בסה\"כ", val:volRegs+mgrRegs+dmCount, icon:"👥", col:C.navy},
