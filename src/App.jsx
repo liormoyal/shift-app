@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.2.4";
+var APP_VERSION = "1.2.5";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -982,8 +982,8 @@ function ClosedBanner(props) {
   return (
     <div style={{background:"linear-gradient(135deg,#1A1A2E,#2D2D44)",color:"#fff",borderRadius:14,padding:"26px 28px",marginBottom:24,textAlign:"center"}}>
       <div style={{fontSize:40,marginBottom:10}}>🔒</div>
-      <div style={{fontSize:20,fontWeight:900,marginBottom:6}}>ההרשמה למשמרות טרם נפתחה</div>
-      <div style={{fontSize:14,opacity:.75}}>{props.sub||"ההרשמה תיפתח בקרוב על ידי הנהלת האירוע."}</div>
+      <div style={{fontSize:20,fontWeight:900,marginBottom:6}}>ההרשמה למשמרות סגורה כעת</div>
+      <div style={{fontSize:14,opacity:.75}}>{props.sub||"לפרטים ניתן לפנות להנהלת האירוע."}</div>
     </div>
   );
 }
