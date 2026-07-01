@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 var ICONS = ["🌅","☀️","🌞","🌆","🌇","🌃","🌙","⭐","🌟","✨","🔴","🟠","🟡","🟢","🔵","🟣","📋","🎯","🔆","💡"];
 var DAYS  = [1,2,3,4,5,6,7,8,9,10,11];
-var APP_VERSION = "1.1.3";
+var APP_VERSION = "1.1.4";
 
 var C = {
   navy:"#0F2D4A", amber:"#E67E22", bg:"#EEF2F7", card:"#FFF",
@@ -76,28 +76,11 @@ function getDayMgrOcc(dmRegs) {
   return occ;
 }
 
-var _logId = 1;
-function makeLog(type, uid, uname, shift, day, dayNames, actor) {
-  var dayLabel = shift ? (dayNames[shift.day] || ("יום " + shift.day))
-                       : day ? (dayNames[day]  || ("יום " + day)) : null;
-  return {
-    id: _logId++, type: type, userId: uid, userName: uname,
-    shiftId: shift ? shift.id : null,
-    shiftName: shift ? shift.name : null,
-    shiftHours: shift ? shift.hours : null,
-    dayLabel: dayLabel,
-    actorId: actor.id, actorName: actor.name, actorType: actor.type,
-    ts: new Date().toISOString(),
-  };
-}
-
 function fmtTime(iso) {
   return new Date(iso).toLocaleString("he-IL",{
     day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"
   });
 }
-
-function colp(a, b) { return a + b; }
 
 // ─── Export to Excel ─────────────────────────────────────────────────────────
 function doExport(users, shifts, regs, dmRegs, dayNames) {
@@ -156,11 +139,38 @@ function doExportLog(log, dayNames) {
 function fmtPhone(raw) {
   if (raw === null || raw === undefined) return "";
   var s = String(raw).trim();
-  if (/^5\d+$/.test(s)) {            // Israeli mobile that lost its leading 0 in Excel
-    s = "0" + s;                     // 548166099 -> 0548166099
-    return s.slice(0,3) + "-" + s.slice(3);  // -> 054-8166099
+  if (s === "") return "";
+  // Only repair pure-digit strings that lost their leading 0 in Excel.
+  if (/^\d+$/.test(s) && s.charAt(0) !== "0") {
+    if (s.length === 9 && s.charAt(0) === "5") {              // mobile: 5XXXXXXXX
+      s = "0" + s;                                            // -> 0548166099
+      return s.slice(0,3) + "-" + s.slice(3);                 // -> 054-8166099
+    }
+    if (s.length === 8 && "23489".indexOf(s.charAt(0)) >= 0) { // landline: XXXXXXXX
+      s = "0" + s;                                            // -> 031234567
+      return s.slice(0,2) + "-" + s.slice(2);                 // -> 03-1234567
+    }
   }
   return s;
+}
+
+// Map RPC/DB error codes to friendly Hebrew; never surface raw schema text.
+function friendlyError(err, fallback) {
+  var msg = (err && err.message) ? err.message : String(err || "");
+  var map = [
+    ["unauthorized", "אימות נכשל. התחבר/י מחדש."],
+    ["already_registered", "המשתמש כבר רשום."],
+    ["shift_full", "המשמרת מלאה."],
+    ["day_full", "היום מלא."],
+    ["registration_closed", "ההרשמה סגורה."],
+    ["user_not_found", "המשתמש לא נמצא."],
+    ["shift_not_found", "המשמרת לא נמצאה."],
+    ["too_many_attempts", "יותר מדי ניסיונות. נסה/י שוב מאוחר יותר."],
+  ];
+  for (var i = 0; i < map.length; i++) {
+    if (msg.indexOf(map[i][0]) >= 0) return map[i][1];
+  }
+  return fallback || "אירעה שגיאה. נסה/י שוב.";
 }
 
 function parseImport(file, onDone, onError) {
@@ -488,7 +498,7 @@ export default function App() {
 
   function handleRegister(shiftId){
     supabase.rpc("register_self",{p_user_id:me.id,p_pw:me.pw||"",p_shift_id:shiftId}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       if(!res.data.success){var m={shift_full:"המשמרת מלאה.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה.",unauthorized:"אימות נכשל. התחבר/י מחדש."};alert(m[res.data.error]||res.data.error);return;}
       setRegs(function(p){var n=Object.assign({},p);n[me.id]=shiftId;return n;});
       var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===shiftId){shift=shifts[i];break;}}
@@ -503,7 +513,7 @@ export default function App() {
     if ((dmOcc[day]||[]).length >= dayConfig.maxDayMgr) { alert("היום מלא — אין מקום לאחראי יום נוסף."); return; }
     if (dmRegs[userId]) { alert("המשתמש כבר רשום ליום אחר."); return; }
     supabase.rpc("admin_register_dm",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_user_id:userId,p_day:day}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[userId]=day;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e, me.pw); pushLog(setLog,e);
@@ -521,7 +531,7 @@ export default function App() {
       if (u && u.type==="manager"   && o.managers.length   >= shift.maxManagers)   { alert("אין מקום לאחראי משמרת נוסף."); return; }
     }
     supabase.rpc("admin_register_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_user_id:userId,p_shift_id:shiftId}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setRegs(function(p){var n=Object.assign({},p);n[userId]=shiftId;return n;});
       var e={type:"register",userId:userId,userName:(users[userId]||{}).name||userId,shiftId:shiftId,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e, me.pw); pushLog(setLog,e);
@@ -531,7 +541,7 @@ export default function App() {
 
   function handleDmRegister(day){
     supabase.rpc("register_dm_self",{p_user_id:me.id,p_pw:me.pw||"",p_day:day}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       if(!res.data.success){var m={day_full:"היום מלא.",already_registered:"כבר רשום/ה.",registration_closed:"ההרשמה סגורה.",unauthorized:"אימות נכשל. התחבר/י מחדש."};alert(m[res.data.error]||res.data.error);return;}
       setDmRegs(function(p){var n=Object.assign({},p);n[me.id]=day;return n;});
       var e={type:"register",userId:me.id,userName:me.name,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
@@ -544,7 +554,7 @@ export default function App() {
     var sid=regs[uid];
     var shift=null;for(var i=0;i<shifts.length;i++){if(shifts[i].id===sid){shift=shifts[i];break;}}
     supabase.rpc("unregister",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_target_id:uid}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:sid,shiftName:shift?shift.name:null,shiftHours:shift?shift.hours:null,dayLabel:shift?(dayNames[shift.day]||("יום "+shift.day)):null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e, me.pw); pushLog(setLog,e);
@@ -555,7 +565,7 @@ export default function App() {
   function handleDmRemove(uid){
     var day=dmRegs[uid];
     supabase.rpc("unregister_dm",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_target_id:uid}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setDmRegs(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"remove",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:dayNames[day]||("יום "+day),actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e, me.pw); pushLog(setLog,e);
@@ -565,7 +575,7 @@ export default function App() {
 
   function handleDeleteUser(uid){
     supabase.rpc("admin_delete_user",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:uid}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setUsers(function(p){var n=Object.assign({},p);delete n[uid];return n;});
       var e={type:"delete_user",userId:uid,userName:(users[uid]||{}).name||uid,shiftId:null,shiftName:null,shiftHours:null,dayLabel:null,actorId:me.id,actorName:me.name,actorType:me.type};
       dbLog(e, me.pw); pushLog(setLog,e);
@@ -583,7 +593,7 @@ export default function App() {
       return obj;
     });
     supabase.rpc("admin_import_users",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_rows:cleaned}).then(function(res){
-      if(res.error){alert("שגיאה בייבוא: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error, "הייבוא נכשל. בדוק/י את הקובץ ונסה/י שוב."));return;}
       setUsers(function(prev){
         var n=Object.assign({},prev);
         for(var i=0;i<newArr.length;i++){
@@ -643,7 +653,7 @@ export default function App() {
   function handleUpdateShift(day,shiftId,field,value){
     var dbField=field==="maxVol"?"max_volunteers":field==="maxMgr"?"max_managers":field;
     supabase.rpc("admin_update_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId,p_field:dbField,p_value:String(value)}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).map(function(s){if(s.id!==shiftId)return s;var ns=Object.assign({},s);ns[field]=value;return ns;});return next;});
     });
   }
@@ -653,14 +663,14 @@ export default function App() {
     var maxOrder=0;var arr=shiftMap[day]||[];
     for(var i=0;i<arr.length;i++) if(arr[i].sortOrder>maxOrder) maxOrder=arr[i].sortOrder;
     supabase.rpc("admin_add_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:newId,p_day:day,p_sort:maxOrder+1}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).concat([{id:newId,name:"משמרת חדשה",hours:"00:00-00:00",icon:"⭐",maxVol:10,maxMgr:1,sortOrder:maxOrder+1}]);return next;});
     });
   }
 
   function handleRemoveShift(day,shiftId){
     supabase.rpc("admin_remove_shift",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_id:shiftId}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setShiftMap(function(prev){var next=Object.assign({},prev);next[day]=(prev[day]||[]).filter(function(s){return s.id!==shiftId;});return next;});
       setRegs(function(prev){var n=Object.assign({},prev);var keys=Object.keys(n);for(var i=0;i<keys.length;i++){if(n[keys[i]]===shiftId)delete n[keys[i]];}return n;});
     });
@@ -668,7 +678,7 @@ export default function App() {
 
   function handleUpdateDayName(day,name){
     supabase.rpc("admin_set_day_name",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_name:name}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setDayNames(function(p){var n=Object.assign({},p);n[day]=name;return n;});
     });
   }
@@ -676,7 +686,7 @@ export default function App() {
   function handleUpdateDayConfig(day,val){
     var v=Math.min(2,Math.max(0,Number(val)));
     supabase.rpc("admin_set_day_config",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_day:day,p_max:v}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setDayConfs(function(p){var n=Object.assign({},p);n[day]={maxDayMgr:v};return n;});
     });
   }
@@ -684,7 +694,7 @@ export default function App() {
   function handleToggleReg(){
     var v=regOpen?"false":"true";
     supabase.rpc("admin_set_setting",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_key:"registration_open",p_value:v}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setRegOpen(!regOpen);
     });
   }
@@ -692,7 +702,7 @@ export default function App() {
   function handleToggleSelfRemove(){
     var v=allowSelfRemove?"false":"true";
     supabase.rpc("admin_set_setting",{p_actor_id:me.id,p_actor_pw:me.pw||"",p_key:"allow_self_remove",p_value:v}).then(function(res){
-      if(res.error){alert("שגיאה: "+res.error.message);return;}
+      if(res.error){alert(friendlyError(res.error));return;}
       setAllowSelfRemove(!allowSelfRemove);
     });
   }
@@ -1061,10 +1071,29 @@ function VolView(props) {
             {(props.regOpen || myShift) && DAYS.map(function(day) {
               var dayShifts = props.shifts.filter(function(s){ return s.day === day; });
               if (!dayShifts.length) return null;
-              var dayMgrs = (props.dmOcc[day]||[]).length;
+              var dayMgrs = (props.dmOcc[day]||[]).map(function(id){ return props.users[id]; }).filter(Boolean);
               var maxDm = (props.dayConfigs[day]||{maxDayMgr:2}).maxDayMgr;
+              var banner = (
+                <div style={{padding:"12px 18px",borderBottom:"2px solid #EEF2F7",background:"#F0FDF9"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.teal,marginBottom:7,letterSpacing:.5}}>אחראי יום ({dayMgrs.length}/{maxDm})</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {dayMgrs.length === 0 && <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>טרם שובץ אחראי יום</span>}
+                    {dayMgrs.map(function(m,i) {
+                      return (
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:7,background:"#CCFBF1",borderRadius:7,padding:"5px 10px"}}>
+                          <div style={{width:24,height:24,borderRadius:"50%",background:C.teal,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{(m.name||"?").charAt(0)}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:"#134E4A"}}>{m.name}</div>
+                        </div>
+                      );
+                    })}
+                    {dayMgrs.length < maxDm && Array(maxDm - dayMgrs.length).fill(0).map(function(_,i) {
+                      return <div key={"e"+i} style={{display:"flex",alignItems:"center",gap:5,border:"1.5px dashed #5EEAD4",borderRadius:7,padding:"5px 10px"}}><span style={{fontSize:11,color:"#5EEAD4",fontWeight:600}}>+ ממתין</span></div>;
+                    })}
+                  </div>
+                </div>
+              );
               return (
-                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={"אחראי יום: "+dayMgrs+"/"+maxDm}>
+                <DayCard key={day} title={props.dayNames[day]||("יום "+day)} meta={dayShifts.length+" משמרות"} banner={banner}>
                   {dayShifts.map(function(shift, idx) {
                     var slot = getSlot(shift);
                     var isMe = shift.id === myShiftId;
